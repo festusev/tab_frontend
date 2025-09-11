@@ -259,8 +259,14 @@ ipcMain.handle('app:run-testcases', async (_evt, problemName) => {
             return { ok: false, error: `Unknown problem: ${problemName}` };
         }
 
-        // Create the command to copy
-        const command = `python run_testcases.py ${arg}`;
+        // Get the current file path to use as the solution file
+        const currentFile = currentFilePath;
+        if (!currentFile) {
+            return { ok: false, error: 'No file is currently open' };
+        }
+
+        // Create the command to copy with the solution file path
+        const command = `python run_testcases.py ${arg} --solution "${currentFile}"`;
 
         // Copy to clipboard
         clipboard.writeText(command);

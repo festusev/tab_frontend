@@ -832,7 +832,8 @@ async function loadAssistants() {
                 name: 'No Assistant',
                 url: 'na',
                 displayName: 'No Assistant',
-                actualName: 'No Assistant'
+                actualName: 'No Assistant',
+                obfuscatedDirName: 'no_assistant'
             });
             currentAssistantSelect.appendChild(noAssistantOption);
 
