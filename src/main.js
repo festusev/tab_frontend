@@ -98,9 +98,9 @@ ipcMain.on('app:set-current-file', (_evt, filePath) => {
 // Open a file by path relative to app root
 ipcMain.handle('app:open-path', async (_evt, relativePath) => {
     try {
-        // Get current actual assistant name from renderer for file operations
-        const assistantName = await mainWindow.webContents.executeJavaScript('window.api.getCurrentActualAssistantName()');
-        const safeAssistantName = assistantName.replace(/[^A-Za-z0-9_\-]/g, '_');
+        // Get current obfuscated directory name from renderer for file operations
+        const obfuscatedDirName = await mainWindow.webContents.executeJavaScript('window.api.getCurrentObfuscatedDirName()');
+        const safeAssistantName = obfuscatedDirName ? obfuscatedDirName.replace(/[^A-Za-z0-9_\-]/g, '_') : 'assistant_1';
 
         let filePath;
 
@@ -278,9 +278,9 @@ ipcMain.handle('app:log-keystroke', async (_evt, { problemName, timestamp, actio
             return { ok: false, error: 'Missing required parameters' };
         }
 
-        // Get current actual assistant name from renderer for file operations
-        const assistantName = await mainWindow.webContents.executeJavaScript('window.api.getCurrentActualAssistantName()');
-        const safeAssistantName = assistantName.replace(/[^A-Za-z0-9_\-]/g, '_');
+        // Get current obfuscated directory name from renderer for file operations
+        const obfuscatedDirName = await mainWindow.webContents.executeJavaScript('window.api.getCurrentObfuscatedDirName()');
+        const safeAssistantName = obfuscatedDirName ? obfuscatedDirName.replace(/[^A-Za-z0-9_\-]/g, '_') : 'assistant_1';
 
         // Create the CSV filename based on problem name
         const csvFileName = `${problemName}_log.csv`;

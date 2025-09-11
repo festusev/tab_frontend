@@ -25,6 +25,7 @@ const DEFAULT_COMPLETIONS_URL = resolveCompletionsUrl();
 let currentAssistantUrl = DEFAULT_COMPLETIONS_URL;
 let currentAssistantName = null;
 let currentActualAssistantName = null;
+let currentObfuscatedDirName = null;
 
 contextBridge.exposeInMainWorld('api', {
     openFile: () => ipcRenderer.invoke('app:open'),
@@ -36,8 +37,10 @@ contextBridge.exposeInMainWorld('api', {
     setAssistantUrl: (url) => { currentAssistantUrl = url; },
     setAssistantName: (name) => { currentAssistantName = name; },
     setActualAssistantName: (name) => { currentActualAssistantName = name; },
+    setObfuscatedDirName: (name) => { currentObfuscatedDirName = name; },
     getCurrentAssistantName: () => currentAssistantName,
     getCurrentActualAssistantName: () => currentActualAssistantName,
+    getCurrentObfuscatedDirName: () => currentObfuscatedDirName,
     getAssistants: () => ipcRenderer.invoke('app:get-assistants'),
     openPath: (relativePath) => ipcRenderer.invoke('app:open-path', relativePath),
     readProblemsConfig: (relativePath) => ipcRenderer.invoke('app:read-problems-config', relativePath),

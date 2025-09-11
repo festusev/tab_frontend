@@ -859,13 +859,20 @@ async function loadAssistants() {
                         return aNum - bNum;
                     });
 
-                    for (const [obfuscatedName, actualName] of mappingEntries) {
+                    for (const [obfuscatedName, mappingData] of mappingEntries) {
+                        // Handle both old format (string) and new format (object)
+                        const actualName = typeof mappingData === 'string' ? mappingData : mappingData.actualName;
+                        const obfuscatedDirName = typeof mappingData === 'string' ?
+                            `assistant_${parseInt(obfuscatedName.replace('Assistant ', ''))}` :
+                            mappingData.obfuscatedDirName;
+
                         const originalAssistant = assistants.find(a => a.name === actualName);
                         if (originalAssistant) {
                             obfuscatedAssistants.push({
                                 ...originalAssistant,
                                 displayName: obfuscatedName,
-                                actualName: actualName
+                                actualName: actualName,
+                                obfuscatedDirName: obfuscatedDirName
                             });
                         }
                     }
@@ -877,12 +884,17 @@ async function loadAssistants() {
                     for (let i = 0; i < shuffledAssistants.length; i++) {
                         const obfuscatedName = `Assistant ${i + 1}`;
                         const actualName = shuffledAssistants[i].name;
-                        assistantMappings[obfuscatedName] = actualName;
+                        const obfuscatedDirName = `assistant_${i + 1}`;
+                        assistantMappings[obfuscatedName] = {
+                            actualName: actualName,
+                            obfuscatedDirName: obfuscatedDirName
+                        };
 
                         obfuscatedAssistants.push({
                             ...shuffledAssistants[i],
                             displayName: obfuscatedName,
-                            actualName: actualName
+                            actualName: actualName,
+                            obfuscatedDirName: obfuscatedDirName
                         });
                     }
 
@@ -896,10 +908,11 @@ async function loadAssistants() {
             } catch (mappingError) {
                 console.error('Error handling assistant mappings:', mappingError);
                 // Fallback to original assistants if mapping fails
-                obfuscatedAssistants = assistants.map(a => ({
+                obfuscatedAssistants = assistants.map((a, index) => ({
                     ...a,
                     displayName: a.name,
-                    actualName: a.name
+                    actualName: a.name,
+                    obfuscatedDirName: `assistant_${index + 1}`
                 }));
             }
 
@@ -910,7 +923,8 @@ async function loadAssistants() {
                 option.dataset.assistantData = JSON.stringify({
                     name: assistant.actualName,
                     url: assistant.url,
-                    displayName: assistant.displayName
+                    displayName: assistant.displayName,
+                    obfuscatedDirName: assistant.obfuscatedDirName || `assistant_${index + 1}`
                 });
 
                 // Adjust index by 1 since we added "No Assistant" first
@@ -943,6 +957,8 @@ async function loadAssistants() {
                     window.api.setAssistantName(assistantData.displayName || assistantData.name);
                     // Store the actual name for file operations
                     window.api.setActualAssistantName(assistantData.name);
+                    // Store the obfuscated directory name for file operations
+                    window.api.setObfuscatedDirName(assistantData.obfuscatedDirName);
                     // Store the display name in localStorage for UI consistency
                     localStorage.setItem('selected_assistant', assistantData.displayName || assistantData.name);
                     updateTitle(); // Update the title to show the assistant name
@@ -960,6 +976,8 @@ async function loadAssistants() {
                         window.api.setAssistantName(assistantData.displayName || assistantData.name);
                         // Store the actual name for file operations
                         window.api.setActualAssistantName(assistantData.name);
+                        // Store the obfuscated directory name for file operations
+                        window.api.setObfuscatedDirName(assistantData.obfuscatedDirName);
                         // Store the display name in localStorage for UI consistency
                         localStorage.setItem('selected_assistant', assistantData.displayName || assistantData.name);
                         updateTitle(); // Update the title to show the new assistant name
