@@ -177,12 +177,43 @@ ipcMain.handle('app:write-file', (_evt, relativePath, content) => {
     }
 });
 
+// Function to read active assistants from active_assistants.txt
+function readActiveAssistants() {
+    try {
+        const activeAssistantsPath = path.join(app.getAppPath(), 'active_assistants.txt');
+        if (!fs.existsSync(activeAssistantsPath)) {
+            // If file doesn't exist, return all assistants (backward compatibility)
+            return null;
+        }
+        const raw = fs.readFileSync(activeAssistantsPath, 'utf8');
+        const activeNames = raw.split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0);
+        return activeNames;
+    } catch (err) {
+        console.error('Failed to read active_assistants.txt:', err);
+        return null;
+    }
+}
+
 // Get assistants configuration
 ipcMain.handle('app:get-assistants', (_evt) => {
     try {
         const filePath = path.join(app.getAppPath(), 'assistants.json');
         const raw = fs.readFileSync(filePath, 'utf8');
-        const assistants = JSON.parse(raw);
+        const allAssistants = JSON.parse(raw);
+
+        // Filter assistants based on active_assistants.txt
+        const activeNames = readActiveAssistants();
+        let assistants = allAssistants;
+
+        if (activeNames !== null) {
+            // Filter to only include assistants whose names are in active_assistants.txt
+            assistants = allAssistants.filter(assistant =>
+                activeNames.includes(assistant.name)
+            );
+        }
+
         return { ok: true, assistants };
     } catch (err) {
         // Return default assistant if file doesn't exist or can't be read
