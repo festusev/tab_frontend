@@ -21,15 +21,27 @@ function resolveCompletionsUrl() {
 
 const DEFAULT_COMPLETIONS_URL = resolveCompletionsUrl();
 
+// Store for current assistant selection
+let currentAssistantUrl = DEFAULT_COMPLETIONS_URL;
+let currentAssistantName = null;
+let currentActualAssistantName = null;
+
 contextBridge.exposeInMainWorld('api', {
     openFile: () => ipcRenderer.invoke('app:open'),
     saveFile: () => ipcRenderer.invoke('app:save'),
     onFileOpened: (callback) => ipcRenderer.on('file-opened', (_evt, payload) => callback(payload)),
     onFileSaved: (callback) => ipcRenderer.on('file-saved', (_evt, payload) => callback(payload)),
     setCurrentFile: (filePath) => ipcRenderer.send('app:set-current-file', filePath),
-    getCompletionsUrl: () => DEFAULT_COMPLETIONS_URL,
+    getCompletionsUrl: () => currentAssistantUrl,
+    setAssistantUrl: (url) => { currentAssistantUrl = url; },
+    setAssistantName: (name) => { currentAssistantName = name; },
+    setActualAssistantName: (name) => { currentActualAssistantName = name; },
+    getCurrentAssistantName: () => currentAssistantName,
+    getCurrentActualAssistantName: () => currentActualAssistantName,
+    getAssistants: () => ipcRenderer.invoke('app:get-assistants'),
     openPath: (relativePath) => ipcRenderer.invoke('app:open-path', relativePath),
     readProblemsConfig: (relativePath) => ipcRenderer.invoke('app:read-problems-config', relativePath),
+    writeFile: (relativePath, content) => ipcRenderer.invoke('app:write-file', relativePath, content),
     openExternalUrl: (url) => ipcRenderer.invoke('app:open-external', url),
     runTestcases: (problemName) => ipcRenderer.invoke('app:run-testcases', problemName),
     logKeystroke: (data) => ipcRenderer.invoke('app:log-keystroke', data)

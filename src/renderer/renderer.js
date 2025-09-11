@@ -8,6 +8,7 @@ const userNameInput = document.getElementById('user-name');
 const btnScratch = document.getElementById('btn-scratch');
 const btnSurvey = document.getElementById('btn-survey');
 const problemsContainer = document.getElementById('problems');
+const assistantSelect = document.getElementById('assistant-select');
 const editor = document.getElementById('editor');
 const ghostEl = document.getElementById('ghost');
 const measureEl = document.getElementById('editor-measure');
@@ -21,6 +22,7 @@ let userName = (typeof localStorage !== 'undefined' && localStorage.getItem('use
 let currentProblemUrl = null;
 let currentProblemName = null;
 let problemSuffixToUrl = new Map(); // maps '/problems/<safe>.py' to URL
+
 
 let overlayRafId = 0;
 function scheduleOverlayResync() {
@@ -71,10 +73,12 @@ if (btnRunTestcases) {
 }
 
 if (btnBack) {
-    btnBack.addEventListener('click', () => {
+    btnBack.addEventListener('click', async () => {
         if (launch) {
             launch.style.display = 'flex';
         }
+        // Refresh assistants when returning to launch to pick up any config changes
+        await loadAssistants();
         // Focus the user name input when returning to launch
         if (userNameInput) {
             userNameInput.focus();
@@ -85,7 +89,8 @@ if (btnBack) {
 function updateTitle() {
     const base = currentFilePath ? currentFilePath.split(/[\\/]/).pop() : 'untitled';
     const dirty = isDirty ? ' *' : '';
-    const namePart = userName ? ` — ${userName}` : '';
+    const assistantName = window.api.getCurrentAssistantName();
+    const namePart = assistantName ? ` — ${assistantName}` : '';
     filenameElem.textContent = base + dirty + namePart;
 }
 
@@ -230,6 +235,7 @@ async function fetchCompletion(prefixText, opts) {
     const insert = !!(opts && opts.insert);
     const baseUrl = (window.api && window.api.getCompletionsUrl) ? window.api.getCompletionsUrl() : null;
     const url = baseUrl ? (baseUrl.endsWith('/') ? baseUrl : baseUrl + '/') : null;
+
     if (!url) {
         if (insert) insertSpacesAtCursor();
         return null;
@@ -254,7 +260,8 @@ async function fetchCompletion(prefixText, opts) {
             if (Array.isArray(parsed)) predicted = String(parsed[0] ?? '');
             else if (typeof parsed === 'string') predicted = parsed;
             else if (parsed && typeof parsed.text === 'string') predicted = parsed.text;
-        } catch (_e) {
+        } catch (parseError) {
+            // If JSON parsing fails, treat the raw response as the prediction
             predicted = raw;
         }
         const suffixStart = prefixText.length;
@@ -267,7 +274,12 @@ async function fetchCompletion(prefixText, opts) {
             setTimeout(() => logKeystroke('proposed_suggestion', suffix), 0);
         }
 
-        renderGhost();
+        try {
+            renderGhost();
+        } catch (ghostError) {
+            // If ghost rendering fails, just continue without showing ghost text
+            console.warn('Ghost rendering failed:', ghostError);
+        }
         if (insert) {
             if (!suffix) {
                 insertSpacesAtCursor();
@@ -289,10 +301,27 @@ async function fetchCompletion(prefixText, opts) {
             }
         }
         return suffix;
-    } catch (_err) {
+    } catch (err) {
+        // Debug: log the error to understand what's happening
+        console.log('Completion error:', err.name, err.message, err);
+
+        // Don't show error for aborted requests (these are intentional cancellations)
+        if (err.name === 'AbortError') {
+            return null;
+        }
+
+        // Only show error message for actual network/HTTP errors, not for empty completions
         if (insert) {
             insertSpacesAtCursor();
-            statusElem.textContent = '[Completion failed]';
+        }
+        // Check if this is a network/HTTP error vs other types of errors
+        if ((err.message && err.message.includes('HTTP')) ||
+            (err.message && err.message.includes('fetch')) ||
+            err.name === 'TypeError') {
+            statusElem.textContent = 'Error retrieving completion';
+        } else {
+            // For other errors (like parsing), just show a generic status
+            statusElem.textContent = '[No completion]';
         }
         return null;
     } finally {
@@ -301,15 +330,15 @@ async function fetchCompletion(prefixText, opts) {
 }
 
 function maybeFetchCompletion(prefixText, opts) {
-    if (suppressUntilInput) return null;
+    if (suppressUntilInput || isCompleting) return null;
     return fetchCompletion(prefixText, opts);
 }
 
 function scheduleCompletionFetch() {
     if (inputDebounceTimer) clearTimeout(inputDebounceTimer);
-    inputDebounceTimer = setTimeout(() => {
+    inputDebounceTimer = setTimeout(async () => {
         const prefixText = editor.value.slice(0, editor.selectionStart);
-        maybeFetchCompletion(prefixText, { insert: false });
+        await maybeFetchCompletion(prefixText, { insert: false });
         renderGhost();
     }, COMPLETION_DEBOUNCE_MS);
 }
@@ -650,7 +679,8 @@ function extractProblemNameFromPath(filePath) {
     }
 
     // Check if this is a problem file in the problems directory
-    const match = filePath.match(/\/problems\/([^\/]+)\.py$/);
+    // Updated regex to handle assistant-specific paths: /problems/<assistant>/filename.py
+    const match = filePath.match(/\/problems\/[^\/]+\/([^\/]+)\.py$/);
     if (match) {
         return match[1]; // Return the filename without extension
     }
@@ -766,9 +796,189 @@ function updateCurrentProblemForLogging(filePath) {
 
 // debug overlay removed
 
+// Function to shuffle array in place
+function shuffleArray(array) {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+}
+
+// Function to load and populate assistants dropdown
+async function loadAssistants() {
+    try {
+        const assistantsRes = await window.api.getAssistants();
+        const assistants = (assistantsRes && assistantsRes.ok && Array.isArray(assistantsRes.assistants)) ? assistantsRes.assistants : [];
+
+        // Get current assistant select element (may have been refreshed)
+        const currentAssistantSelect = document.getElementById('assistant-select');
+
+        // Populate assistant dropdown
+        if (currentAssistantSelect && Array.isArray(assistants)) {
+            currentAssistantSelect.innerHTML = '';
+            const currentAssistantName = window.api.getCurrentAssistantName();
+            let selectedIndex = 0;
+
+            // Get saved assistant from localStorage
+            const savedAssistant = localStorage.getItem('selected_assistant');
+
+            // Always add "No Assistant" option first
+            const noAssistantOption = document.createElement('option');
+            noAssistantOption.value = 'na';
+            noAssistantOption.textContent = 'No Assistant';
+            noAssistantOption.dataset.assistantData = JSON.stringify({
+                name: 'No Assistant',
+                url: 'na',
+                displayName: 'No Assistant',
+                actualName: 'No Assistant'
+            });
+            currentAssistantSelect.appendChild(noAssistantOption);
+
+            // Check if "No Assistant" should be selected
+            if (savedAssistant === 'No Assistant' || (!savedAssistant && currentAssistantName === 'No Assistant')) {
+                selectedIndex = 0;
+            }
+
+            // Handle assistant name obfuscation
+            let assistantMappings = {};
+            let obfuscatedAssistants = [];
+
+            try {
+                // Try to read existing mapping file
+                const mappingRes = await window.api.readProblemsConfig('problems/mapping_do_not_read.json');
+                if (mappingRes && mappingRes.ok && mappingRes.content) {
+                    assistantMappings = JSON.parse(mappingRes.content);
+
+                    // Create obfuscated assistants in the order specified by the mapping
+                    const mappingEntries = Object.entries(assistantMappings);
+                    mappingEntries.sort((a, b) => {
+                        const aNum = parseInt(a[0].replace('Assistant ', ''));
+                        const bNum = parseInt(b[0].replace('Assistant ', ''));
+                        return aNum - bNum;
+                    });
+
+                    for (const [obfuscatedName, actualName] of mappingEntries) {
+                        const originalAssistant = assistants.find(a => a.name === actualName);
+                        if (originalAssistant) {
+                            obfuscatedAssistants.push({
+                                ...originalAssistant,
+                                displayName: obfuscatedName,
+                                actualName: actualName
+                            });
+                        }
+                    }
+                } else {
+                    // Mapping file doesn't exist, create it with shuffled assistants
+                    const shuffledAssistants = shuffleArray(assistants);
+
+                    // Create mapping object
+                    for (let i = 0; i < shuffledAssistants.length; i++) {
+                        const obfuscatedName = `Assistant ${i + 1}`;
+                        const actualName = shuffledAssistants[i].name;
+                        assistantMappings[obfuscatedName] = actualName;
+
+                        obfuscatedAssistants.push({
+                            ...shuffledAssistants[i],
+                            displayName: obfuscatedName,
+                            actualName: actualName
+                        });
+                    }
+
+                    // Write the mapping file
+                    try {
+                        await window.api.writeFile('problems/mapping_do_not_read.json', JSON.stringify(assistantMappings, null, 2));
+                    } catch (writeError) {
+                        console.error('Failed to write mapping file:', writeError);
+                    }
+                }
+            } catch (mappingError) {
+                console.error('Error handling assistant mappings:', mappingError);
+                // Fallback to original assistants if mapping fails
+                obfuscatedAssistants = assistants.map(a => ({
+                    ...a,
+                    displayName: a.name,
+                    actualName: a.name
+                }));
+            }
+
+            obfuscatedAssistants.forEach((assistant, index) => {
+                const option = document.createElement('option');
+                option.value = assistant.url;
+                option.textContent = assistant.displayName;
+                option.dataset.assistantData = JSON.stringify({
+                    name: assistant.actualName,
+                    url: assistant.url,
+                    displayName: assistant.displayName
+                });
+
+                // Adjust index by 1 since we added "No Assistant" first
+                const adjustedIndex = index + 1;
+
+                // Prioritize localStorage for persistence, fall back to current assistant name
+                if (savedAssistant && assistant.displayName === savedAssistant) {
+                    selectedIndex = adjustedIndex;
+                } else if (!savedAssistant && currentAssistantName && assistant.actualName === currentAssistantName) {
+                    selectedIndex = adjustedIndex;
+                }
+
+                currentAssistantSelect.appendChild(option);
+            });
+
+            // Remove any existing change listeners to avoid duplicates
+            const newSelect = currentAssistantSelect.cloneNode(true);
+            currentAssistantSelect.parentNode.replaceChild(newSelect, currentAssistantSelect);
+            const refreshedSelect = document.getElementById('assistant-select');
+
+            // Set the current/saved or first assistant as selected on the refreshed element
+            if (refreshedSelect) {
+                refreshedSelect.selectedIndex = selectedIndex;
+
+                const selectedOption = refreshedSelect.options[selectedIndex];
+                if (selectedOption) {
+                    const assistantData = JSON.parse(selectedOption.dataset.assistantData);
+                    window.api.setAssistantUrl(assistantData.url);
+                    // Use the display name (obfuscated) for the title bar and UI
+                    window.api.setAssistantName(assistantData.displayName || assistantData.name);
+                    // Store the actual name for file operations
+                    window.api.setActualAssistantName(assistantData.name);
+                    // Store the display name in localStorage for UI consistency
+                    localStorage.setItem('selected_assistant', assistantData.displayName || assistantData.name);
+                    updateTitle(); // Update the title to show the assistant name
+                }
+            }
+
+            // Handle assistant selection changes
+            if (refreshedSelect) {
+                refreshedSelect.addEventListener('change', () => {
+                    const selectedOption = refreshedSelect.options[refreshedSelect.selectedIndex];
+                    if (selectedOption) {
+                        const assistantData = JSON.parse(selectedOption.dataset.assistantData);
+                        window.api.setAssistantUrl(selectedOption.value);
+                        // Use the display name (obfuscated) for the title bar and UI
+                        window.api.setAssistantName(assistantData.displayName || assistantData.name);
+                        // Store the actual name for file operations
+                        window.api.setActualAssistantName(assistantData.name);
+                        // Store the display name in localStorage for UI consistency
+                        localStorage.setItem('selected_assistant', assistantData.displayName || assistantData.name);
+                        updateTitle(); // Update the title to show the new assistant name
+                    }
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load assistants:', error);
+    }
+}
+
+
 // Launch screen logic
 (async function initLaunch() {
     try {
+        // Load assistants configuration
+        await loadAssistants();
+
         // Load problems config from starter_code/problems.json if present
         const res = await window.api.readProblemsConfig('starter_code/problems.json');
         const problems = (res && res.ok && Array.isArray(res.problems)) ? res.problems : [];
@@ -823,11 +1033,6 @@ function updateCurrentProblemForLogging(filePath) {
                     // Set the problem name for testcase running
                     currentProblemName = p.problem_name || p.name || null;
                     updateTitlebarButtons();
-                    // Also open the problem URL in the default browser, if present
-                    const url = p.url;
-                    if (url && typeof url === 'string') {
-                        try { await window.api.openExternalUrl(url); } catch (_e) { }
-                    }
                 });
                 problemsContainer.appendChild(btn);
             }
@@ -835,7 +1040,9 @@ function updateCurrentProblemForLogging(filePath) {
         // Focus name input first
         if (userNameInput) userNameInput.focus();
     } catch (_e) {
-        // If config missing, still show scratchpad option
+        // If config missing, still show scratchpad option and initialize assistants
+        await loadAssistants();
+
         if (launch) launch.style.display = 'flex';
         if (userNameInput && userName) userNameInput.value = userName;
         function setUserName(name) {

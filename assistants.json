@@ -1,0 +1,10 @@
+[
+    {
+        "name": "eta1",
+        "url": "http://localhost:9601"
+    },
+    {
+        "name": "untrained",
+        "url": "http://localhost:9600"
+    }
+]

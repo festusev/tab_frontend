@@ -33,6 +33,22 @@ function createWindow() {
                 { type: 'separator' },
                 { role: 'quit' }
             ]
+        },
+        {
+            label: 'View',
+            submenu: [
+                {
+                    label: 'Toggle Developer Tools',
+                    accelerator: 'CmdOrCtrl+Shift+I',
+                    click: () => {
+                        if (mainWindow.webContents.isDevToolsOpened()) {
+                            mainWindow.webContents.closeDevTools();
+                        } else {
+                            mainWindow.webContents.openDevTools();
+                        }
+                    }
+                }
+            ]
         }
     ];
     const menu = Menu.buildFromTemplate(template);
@@ -80,9 +96,13 @@ ipcMain.on('app:set-current-file', (_evt, filePath) => {
 });
 
 // Open a file by path relative to app root
-ipcMain.handle('app:open-path', (_evt, relativePath) => {
+ipcMain.handle('app:open-path', async (_evt, relativePath) => {
     try {
-        const filePath = path.isAbsolute(relativePath) ? relativePath : path.join(app.getAppPath(), relativePath);
+        // Get current actual assistant name from renderer for file operations
+        const assistantName = await mainWindow.webContents.executeJavaScript('window.api.getCurrentActualAssistantName()');
+        const safeAssistantName = assistantName.replace(/[^A-Za-z0-9_\-]/g, '_');
+
+        let filePath;
 
         // Check if this is a problem file that needs to be copied from starter code
         if (relativePath.startsWith('problems/') && relativePath.endsWith('.py')) {
@@ -90,22 +110,28 @@ ipcMain.handle('app:open-path', (_evt, relativePath) => {
             const filename = path.basename(relativePath);
             const starterFilePath = path.join(app.getAppPath(), 'starter_code', filename);
 
-            // If the file doesn't exist in problems/ but exists in starter_code/
+            // Create assistant-specific path: problems/<assistant>/filename.py
+            const assistantProblemsDir = path.join(app.getAppPath(), 'problems', safeAssistantName);
+            filePath = path.join(assistantProblemsDir, filename);
+
+            // If the file doesn't exist in problems/<assistant>/ but exists in starter_code/
             if (!fs.existsSync(filePath) && fs.existsSync(starterFilePath)) {
                 try {
-                    // Ensure problems directory exists
-                    const problemsDir = path.dirname(filePath);
-                    if (!fs.existsSync(problemsDir)) {
-                        fs.mkdirSync(problemsDir, { recursive: true });
+                    // Ensure assistant-specific problems directory exists
+                    if (!fs.existsSync(assistantProblemsDir)) {
+                        fs.mkdirSync(assistantProblemsDir, { recursive: true });
                     }
 
-                    // Copy the starter file to problems/
+                    // Copy the starter file to problems/<assistant>/
                     const starterContent = fs.readFileSync(starterFilePath, 'utf8');
                     fs.writeFileSync(filePath, starterContent, 'utf8');
                 } catch (copyErr) {
                     return { ok: false, error: `Failed to copy starter file: ${String(copyErr)}` };
                 }
             }
+        } else {
+            // For other files, use the original logic
+            filePath = path.isAbsolute(relativePath) ? relativePath : path.join(app.getAppPath(), relativePath);
         }
 
         const data = fs.readFileSync(filePath, 'utf8');
@@ -125,9 +151,47 @@ ipcMain.handle('app:read-problems-config', (_evt, configRelativePath) => {
             : path.join(app.getAppPath(), configRelativePath);
         const raw = fs.readFileSync(filePath, 'utf8');
         const parsed = JSON.parse(raw);
-        return { ok: true, problems: parsed };
+        return { ok: true, problems: parsed, content: raw };
     } catch (err) {
         return { ok: false, error: String(err) };
+    }
+});
+
+// Write file
+ipcMain.handle('app:write-file', (_evt, relativePath, content) => {
+    try {
+        const filePath = path.isAbsolute(relativePath)
+            ? relativePath
+            : path.join(app.getAppPath(), relativePath);
+
+        // Ensure directory exists
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+
+        fs.writeFileSync(filePath, content, 'utf8');
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: String(err) };
+    }
+});
+
+// Get assistants configuration
+ipcMain.handle('app:get-assistants', (_evt) => {
+    try {
+        const filePath = path.join(app.getAppPath(), 'assistants.json');
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const assistants = JSON.parse(raw);
+        return { ok: true, assistants };
+    } catch (err) {
+        // Return default assistant if file doesn't exist or can't be read
+        const defaultAssistant = {
+            name: "Default",
+            url: "http://localhost:9600",
+            port: 9600
+        };
+        return { ok: true, assistants: [defaultAssistant] };
     }
 });
 
@@ -183,9 +247,19 @@ ipcMain.handle('app:log-keystroke', async (_evt, { problemName, timestamp, actio
             return { ok: false, error: 'Missing required parameters' };
         }
 
+        // Get current actual assistant name from renderer for file operations
+        const assistantName = await mainWindow.webContents.executeJavaScript('window.api.getCurrentActualAssistantName()');
+        const safeAssistantName = assistantName.replace(/[^A-Za-z0-9_\-]/g, '_');
+
         // Create the CSV filename based on problem name
         const csvFileName = `${problemName}_log.csv`;
-        const csvPath = path.join(app.getAppPath(), 'problems', csvFileName);
+        const assistantProblemsDir = path.join(app.getAppPath(), 'problems', safeAssistantName);
+        const csvPath = path.join(assistantProblemsDir, csvFileName);
+
+        // Ensure assistant-specific problems directory exists
+        if (!fs.existsSync(assistantProblemsDir)) {
+            fs.mkdirSync(assistantProblemsDir, { recursive: true });
+        }
 
         // Escape any tabs or newlines in the action info for CSV format
         const escapedActionInfo = (actionInfo || '').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r');

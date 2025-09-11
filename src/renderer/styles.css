@@ -104,13 +104,24 @@ body {
     margin-bottom: 12px;
 }
 
-.launch-inner input[type="text"] {
+.launch-inner input[type="text"],
+.launch-inner select {
     width: 100%;
     padding: 8px 10px;
     background: #1e1e1e;
     border: 1px solid #555;
     color: #d4d4d4;
     border-radius: 4px;
+    font-family: inherit;
+}
+
+.launch-inner select {
+    cursor: pointer;
+}
+
+.launch-inner select option {
+    background: #1e1e1e;
+    color: #d4d4d4;
 }
 
 .launch-actions {
