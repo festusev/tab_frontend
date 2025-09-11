@@ -161,6 +161,12 @@ function escapeHtml(text) {
 
 function hideGhost() {
     if (ghostEl) ghostEl.style.display = 'none';
+    if (measureEl) {
+        measureEl.style.visibility = 'hidden';
+        measureEl.style.zIndex = '0';
+    }
+    // Restore normal syntax highlighting without ghost text
+    renderHighlight();
 }
 
 function syncMirrorStyles() {
@@ -183,7 +189,7 @@ function syncMirrorStyles() {
 
 
 function renderGhost() {
-    if (!ghostEl || !measureEl) return;
+    if (!ghostEl || !measureEl || !highlightEl) return;
     syncMirrorStyles();
     const caret = editor.selectionStart;
     const selectionEmpty = editor.selectionStart === editor.selectionEnd;
@@ -193,25 +199,31 @@ function renderGhost() {
         return;
     }
     const ghostText = lastCompletion.suffix;
-    // Prepare mirror with text up to caret and marker span
-    const before = escapeHtml(prefixText);
-    measureEl.innerHTML = before + '<span id="caret-marker">\u200b</span>';
-    // Align mirror scroll to editor
-    measureEl.scrollTop = editor.scrollTop;
-    measureEl.scrollLeft = editor.scrollLeft;
-    const marker = measureEl.querySelector('#caret-marker');
-    if (!marker) {
-        hideGhost();
-        return;
-    }
-    const markerRect = marker.getBoundingClientRect();
-    const baseRect = measureEl.getBoundingClientRect();
-    const left = markerRect.left - baseRect.left;
-    const top = markerRect.top - baseRect.top + GHOST_VERTICAL_ADJUST_PX;
-    ghostEl.textContent = ghostText;
-    ghostEl.style.left = Math.max(0, left) + 'px';
-    ghostEl.style.top = Math.max(0, top) + 'px';
-    ghostEl.style.display = 'block';
+
+    // Create text with ghost completion inserted
+    const fullTextWithGhost = prefixText + ghostText + editor.value.slice(caret);
+
+    // Apply syntax highlighting to the full text
+    const highlightedHtml = highlightPython(fullTextWithGhost);
+
+    // Split the highlighted HTML to insert ghost styling
+    const prefixHighlighted = highlightPython(prefixText);
+    const ghostHighlighted = highlightPython(ghostText);
+    const afterText = editor.value.slice(caret);
+    const afterHighlighted = highlightPython(afterText);
+
+    // Wrap the ghost portion with ghost styling
+    const ghostWrapped = '<span class="ghost-text">' + ghostHighlighted + '</span>';
+
+    // Update the highlight element with ghost text included
+    highlightEl.innerHTML = prefixHighlighted + ghostWrapped + afterHighlighted;
+
+    // Ensure highlight scroll stays in sync
+    if (highlightEl.scrollTop !== editor.scrollTop) highlightEl.scrollTop = editor.scrollTop;
+    if (highlightEl.scrollLeft !== editor.scrollLeft) highlightEl.scrollLeft = editor.scrollLeft;
+
+    // Hide the separate ghost element since we're showing inline
+    ghostEl.style.display = 'none';
 }
 
 async function fetchCompletion(prefixText, opts) {

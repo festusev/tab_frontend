@@ -218,6 +218,29 @@ body {
     left: 0;
     top: 0;
     tab-size: 4;
+    color: #d4d4d4;
+}
+
+.ghost-text {
+    color: #888888 !important;
+    background: rgba(160, 160, 160, 0.08);
+}
+
+/* Override all syntax highlighting colors within ghost text to use consistent gray */
+.ghost-text .tok-kw {
+    color: #888888 !important;
+}
+
+.ghost-text .tok-str {
+    color: #888888 !important;
+}
+
+.ghost-text .tok-com {
+    color: #888888 !important;
+}
+
+.ghost-text .tok-num {
+    color: #888888 !important;
 }
 
 #debug-overlay {
