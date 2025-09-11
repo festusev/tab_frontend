@@ -1,0 +1,14 @@
+{
+    "name": "nano-like-editor",
+    "version": "0.1.0",
+    "description": "Simple Electron desktop app with a nano-like text editor",
+    "main": "src/main.js",
+    "license": "MIT",
+    "private": true,
+    "scripts": {
+        "start": "electron ."
+    },
+    "devDependencies": {
+        "electron": "^28.3.3"
+    }
+}
