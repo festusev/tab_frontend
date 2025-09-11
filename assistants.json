@@ -1,10 +1,10 @@
 [
     {
         "name": "eta1",
-        "url": "http://localhost:9601"
+        "url": "http://128.32.175.196:9532"
     },
     {
         "name": "untrained",
-        "url": "http://localhost:9600"
+        "url": "http://128.32.175.196:9530"
     }
 ]
