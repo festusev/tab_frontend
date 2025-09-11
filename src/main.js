@@ -83,6 +83,31 @@ ipcMain.on('app:set-current-file', (_evt, filePath) => {
 ipcMain.handle('app:open-path', (_evt, relativePath) => {
     try {
         const filePath = path.isAbsolute(relativePath) ? relativePath : path.join(app.getAppPath(), relativePath);
+
+        // Check if this is a problem file that needs to be copied from starter code
+        if (relativePath.startsWith('problems/') && relativePath.endsWith('.py')) {
+            // Extract the filename (e.g., "binary.py" from "problems/binary.py")
+            const filename = path.basename(relativePath);
+            const starterFilePath = path.join(app.getAppPath(), 'starter_code', filename);
+
+            // If the file doesn't exist in problems/ but exists in starter_code/
+            if (!fs.existsSync(filePath) && fs.existsSync(starterFilePath)) {
+                try {
+                    // Ensure problems directory exists
+                    const problemsDir = path.dirname(filePath);
+                    if (!fs.existsSync(problemsDir)) {
+                        fs.mkdirSync(problemsDir, { recursive: true });
+                    }
+
+                    // Copy the starter file to problems/
+                    const starterContent = fs.readFileSync(starterFilePath, 'utf8');
+                    fs.writeFileSync(filePath, starterContent, 'utf8');
+                } catch (copyErr) {
+                    return { ok: false, error: `Failed to copy starter file: ${String(copyErr)}` };
+                }
+            }
+        }
+
         const data = fs.readFileSync(filePath, 'utf8');
         currentFilePath = filePath;
         mainWindow.webContents.send('file-opened', { filePath, content: data });
@@ -151,7 +176,54 @@ ipcMain.handle('app:run-testcases', async (_evt, problemName) => {
     }
 });
 
-app.whenReady().then(createWindow);
+// Log keystroke data to CSV files
+ipcMain.handle('app:log-keystroke', async (_evt, { problemName, timestamp, actionType, actionInfo, caretIndex }) => {
+    try {
+        if (!problemName || !timestamp || !actionType) {
+            return { ok: false, error: 'Missing required parameters' };
+        }
+
+        // Create the CSV filename based on problem name
+        const csvFileName = `${problemName}_log.csv`;
+        const csvPath = path.join(app.getAppPath(), 'problems', csvFileName);
+
+        // Escape any tabs or newlines in the action info for CSV format
+        const escapedActionInfo = (actionInfo || '').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+
+        // Create the log entry
+        const logEntry = `${timestamp}\t${actionType}\t${escapedActionInfo}\t${caretIndex || 0}\n`;
+
+        // Check if file exists to determine if we need to write header
+        const fileExists = fs.existsSync(csvPath);
+
+        // If file doesn't exist, create it with header
+        if (!fileExists) {
+            const header = 'timestamp\taction_type\taction_info\tcaret_index\n';
+            fs.writeFileSync(csvPath, header, 'utf8');
+        }
+
+        // Append the log entry
+        fs.appendFileSync(csvPath, logEntry, 'utf8');
+
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, error: String(err) };
+    }
+});
+
+app.whenReady().then(() => {
+    // Ensure problems directory exists at startup
+    try {
+        const problemsDir = path.join(app.getAppPath(), 'problems');
+        if (!fs.existsSync(problemsDir)) {
+            fs.mkdirSync(problemsDir, { recursive: true });
+        }
+    } catch (err) {
+        console.error('Failed to create problems directory:', err);
+    }
+
+    createWindow();
+});
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();

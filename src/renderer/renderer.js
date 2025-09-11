@@ -249,6 +249,12 @@ async function fetchCompletion(prefixText, opts) {
         let suffix = String(predicted).slice(suffixStart);
         if (suffix.startsWith(' ') && lastLineNonEmpty(prefixText)) suffix = suffix.slice(1);
         lastCompletion = { prefix: prefixText, full: predicted, suffix, time: Date.now() };
+
+        // Log the proposed suggestion if there's actual content to suggest
+        if (suffix && suffix.trim()) {
+            setTimeout(() => logKeystroke('proposed_suggestion', suffix), 0);
+        }
+
         renderGhost();
         if (insert) {
             if (!suffix) {
@@ -265,6 +271,9 @@ async function fetchCompletion(prefixText, opts) {
                 updateTitle();
                 hideGhost();
                 renderHighlight();
+
+                // Log the accepted suggestion (auto-insertion)
+                setTimeout(() => logKeystroke('accepted_suggestion', suffix), 0);
             }
         }
         return suffix;
@@ -301,13 +310,18 @@ editor.addEventListener('keydown', (e) => {
             const start = editor.selectionStart;
             const end = editor.selectionEnd;
             const value = editor.value;
-            editor.value = value.substring(0, start) + lastCompletion.suffix + value.substring(end);
-            editor.selectionStart = editor.selectionEnd = start + lastCompletion.suffix.length;
+            const acceptedText = lastCompletion.suffix;
+            editor.value = value.substring(0, start) + acceptedText + value.substring(end);
+            editor.selectionStart = editor.selectionEnd = start + acceptedText.length;
             isDirty = true;
             statusElem.textContent = '[Completed]';
             updateTitle();
             hideGhost();
             renderHighlight();
+
+            // Log the accepted suggestion
+            setTimeout(() => logKeystroke('accepted_suggestion', acceptedText), 0);
+
             // Chain next suggestion after accept (debounced)
             scheduleCompletionFetch();
         } else {
@@ -506,6 +520,10 @@ window.api.onFileOpened(({ filePath, content }) => {
     updateTitle();
     moveCaretToEnd();
     scheduleOverlayResync();
+
+    // Update current problem name for keystroke logging
+    updateCurrentProblemForLogging(filePath);
+
     // Determine if this opened file corresponds to a known problem and update buttons
     try {
         const appPath = '' + filePath; // ensure string
@@ -606,13 +624,141 @@ editor.addEventListener('mousemove', (e) => {
 // Keep keyboard UX: focus editor
 editor.focus();
 
+// Keystroke tracking functionality
+let currentProblemNameForLogging = null;
+let actionCount = 0;
+
+// Function to extract problem name from file path for logging
+function extractProblemNameFromPath(filePath) {
+    if (!filePath) return null;
+
+    // Check if this is a scratchpad file
+    if (filePath.includes('scratchpad.py')) {
+        return 'scratchpad';
+    }
+
+    // Check if this is a problem file in the problems directory
+    const match = filePath.match(/\/problems\/([^\/]+)\.py$/);
+    if (match) {
+        return match[1]; // Return the filename without extension
+    }
+
+    return null;
+}
+
+// Function to log keystroke data
+async function logKeystroke(actionType, actionInfo = '') {
+    if (!currentProblemNameForLogging) return;
+
+    try {
+        const timestamp = new Date().toISOString();
+        const caretIndex = editor.selectionStart || 0;
+
+        await window.api.logKeystroke({
+            problemName: currentProblemNameForLogging,
+            timestamp: timestamp,
+            actionType: actionType,
+            actionInfo: actionInfo,
+            caretIndex: caretIndex
+        });
+
+        // Increment action count and save code snapshot every 100 actions
+        actionCount++;
+        if (actionCount % 100 === 0) {
+            await logCurrentCode();
+        }
+    } catch (error) {
+        console.error('Failed to log keystroke:', error);
+    }
+}
+
+// Function to log current code content
+async function logCurrentCode() {
+    if (!currentProblemNameForLogging) return;
+
+    try {
+        const timestamp = new Date().toISOString();
+        const caretIndex = editor.selectionStart || 0;
+        const codeContent = editor.value || '';
+
+        await window.api.logKeystroke({
+            problemName: currentProblemNameForLogging,
+            timestamp: timestamp,
+            actionType: 'current_code',
+            actionInfo: codeContent,
+            caretIndex: caretIndex
+        });
+    } catch (error) {
+        console.error('Failed to log current code:', error);
+    }
+}
+
+// Track character typing and backspace using input event
+editor.addEventListener('input', (e) => {
+    if (!currentProblemNameForLogging) return;
+
+    if (e.inputType === 'insertText' || e.inputType === 'insertCompositionText') {
+        // Character typed - use setTimeout to capture state after DOM update
+        const char = e.data || '';
+        if (char) {
+            setTimeout(() => logKeystroke('character_typed', char), 0);
+        }
+    } else if (e.inputType === 'deleteContentBackward') {
+        // Backspace pressed - use setTimeout to capture state after DOM update
+        setTimeout(() => logKeystroke('deletion', '1'), 0);
+    } else if (e.inputType === 'deleteContentForward') {
+        // Delete key pressed - use setTimeout to capture state after DOM update
+        setTimeout(() => logKeystroke('deletion', '1'), 0);
+    }
+});
+
+// Block bulk deletion shortcuts - only allow single character deletion
+editor.addEventListener('keydown', (e) => {
+    // Block bulk deletion shortcuts while preserving single character deletion
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+        // Block if any modifier keys are pressed - this prevents:
+        // - Option+Delete/Backspace (word deletion)
+        // - Cmd+Delete/Backspace (line deletion) 
+        // - Ctrl+Delete/Backspace (word/line deletion on Windows/Linux)
+        // - Shift+Delete/Backspace (which can delete selections)
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        }
+    }
+});
+
+// Track arrow key movements
+editor.addEventListener('keydown', (e) => {
+    if (!currentProblemNameForLogging) return;
+
+    // Track arrow key movements - use setTimeout to capture state after DOM update
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        const direction = e.key.replace('Arrow', '').toLowerCase();
+        setTimeout(() => logKeystroke('arrow_key', direction), 0);
+    }
+});
+
+// Update current problem name when file is opened
+function updateCurrentProblemForLogging(filePath) {
+    currentProblemNameForLogging = extractProblemNameFromPath(filePath);
+
+    // Reset action count and log initial code state
+    if (currentProblemNameForLogging) {
+        actionCount = 0;
+        // Use setTimeout to ensure editor content is updated
+        setTimeout(() => logCurrentCode(), 100);
+    }
+}
+
 // debug overlay removed
 
 // Launch screen logic
 (async function initLaunch() {
     try {
-        // Load problems config from problems/problems.json if present
-        const res = await window.api.readProblemsConfig('problems/problems.json');
+        // Load problems config from starter_code/problems.json if present
+        const res = await window.api.readProblemsConfig('starter_code/problems.json');
         const problems = (res && res.ok && Array.isArray(res.problems)) ? res.problems : [];
         // Build quick lookup from opened file suffix to the problem URL
         problemSuffixToUrl = new Map();

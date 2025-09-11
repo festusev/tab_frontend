@@ -31,7 +31,6 @@ contextBridge.exposeInMainWorld('api', {
     openPath: (relativePath) => ipcRenderer.invoke('app:open-path', relativePath),
     readProblemsConfig: (relativePath) => ipcRenderer.invoke('app:read-problems-config', relativePath),
     openExternalUrl: (url) => ipcRenderer.invoke('app:open-external', url),
-    runTestcases: (problemName) => ipcRenderer.invoke('app:run-testcases', problemName)
+    runTestcases: (problemName) => ipcRenderer.invoke('app:run-testcases', problemName),
+    logKeystroke: (data) => ipcRenderer.invoke('app:log-keystroke', data)
 });
-
-

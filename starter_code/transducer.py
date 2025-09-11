@@ -12,6 +12,3 @@ def read_string():
 def main():
     # Step 1: Read the raw input string
     s = read_string()
-    # Step 2: Process the input string
-    # Step 3: Print the result
-    sys.stdout.write(s[::-1] + "\n")  # Reverse th

@@ -34,6 +34,6 @@ def main():
     q = int(sys.stdin.readline().strip())
 
     # Example loop that just echoes back the commands
-    for _ in range(q):
-        cmd = read_next_move()
+    # for _ in range(q):
+    #     cmd = read_next_move()
     ## Your code here
