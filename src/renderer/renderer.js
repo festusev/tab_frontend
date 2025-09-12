@@ -1055,6 +1055,34 @@ async function loadAssistants() {
             currentAssistantSelect.parentNode.replaceChild(newSelect, currentAssistantSelect);
             const refreshedSelect = document.getElementById('assistant-select');
 
+            // Helper: verify selected assistant's server identity matches expected
+            async function verifyAssistantServer(assistantData) {
+                try {
+                    if (!assistantData || !assistantData.url || assistantData.url === 'na') return;
+                    const base = assistantData.url;
+                    const url = base.endsWith('/') ? base : base + '/';
+                    const res = await fetch(url, { method: 'GET' });
+                    if (!res.ok) {
+                        console.warn('Assistant identity check failed (HTTP ' + res.status + '):', url);
+                        return;
+                    }
+                    let json = null;
+                    try {
+                        json = await res.json();
+                    } catch (_e) {
+                        console.warn('Assistant identity response not JSON at', url);
+                        return;
+                    }
+                    const reported = json && (json.assistant_name || json.name);
+                    const expected = assistantData.name;
+                    if (reported && expected && reported !== expected) {
+                        alert(`Warning: selected assistant "${assistantData.displayName || expected}" expects server identity "${expected}" but server at ${url} reports "${reported}".`);
+                    }
+                } catch (e) {
+                    console.warn('Assistant identity check error:', e);
+                }
+            }
+
             // Set the current/saved or first assistant as selected on the refreshed element
             if (refreshedSelect) {
                 refreshedSelect.selectedIndex = selectedIndex;
@@ -1072,6 +1100,9 @@ async function loadAssistants() {
                     // Store the display name in localStorage for UI consistency
                     localStorage.setItem('selected_assistant', assistantData.displayName || assistantData.name);
                     updateTitle(); // Update the title to show the assistant name
+
+                    // Verify the selected assistant's server identity
+                    verifyAssistantServer(assistantData);
                 }
             }
 
@@ -1091,6 +1122,9 @@ async function loadAssistants() {
                         // Store the display name in localStorage for UI consistency
                         localStorage.setItem('selected_assistant', assistantData.displayName || assistantData.name);
                         updateTitle(); // Update the title to show the new assistant name
+
+                        // Verify on change as well
+                        verifyAssistantServer(assistantData);
                     }
                 });
             }
