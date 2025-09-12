@@ -430,6 +430,67 @@ editor.addEventListener('keydown', (e) => {
     }
 });
 
+// Prevent Shift+Arrow text selection by emulating plain navigation
+editor.addEventListener('keydown', (e) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    if (!e.shiftKey) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const value = editor.value;
+    const start = editor.selectionStart;
+    const end = editor.selectionEnd;
+    // Choose a caret base when there is an active selection
+    let caret = (start === end)
+        ? start
+        : (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? Math.min(start, end) : Math.max(start, end));
+
+    function lineStartIndex(idx) {
+        const prevNewline = value.lastIndexOf('\n', Math.max(0, idx - 1));
+        return prevNewline === -1 ? 0 : prevNewline + 1;
+    }
+    function lineEndIndex(idx) {
+        const nextNewline = value.indexOf('\n', idx);
+        return nextNewline === -1 ? value.length : nextNewline;
+    }
+
+    if (e.key === 'ArrowLeft') {
+        caret = Math.max(0, caret - 1);
+    } else if (e.key === 'ArrowRight') {
+        caret = Math.min(value.length, caret + 1);
+    } else if (e.key === 'ArrowUp') {
+        const curLineStart = lineStartIndex(caret);
+        const curCol = caret - curLineStart;
+        if (curLineStart === 0) {
+            caret = 0;
+        } else {
+            const prevLineEnd = curLineStart - 1; // index of '\n'
+            const prevLineStart = lineStartIndex(prevLineEnd);
+            const prevLineLen = prevLineEnd - prevLineStart;
+            const targetCol = Math.min(curCol, prevLineLen);
+            caret = prevLineStart + targetCol;
+        }
+    } else if (e.key === 'ArrowDown') {
+        const curLineStart = lineStartIndex(caret);
+        const curCol = caret - curLineStart;
+        const curLineEnd = lineEndIndex(caret);
+        if (curLineEnd >= value.length) {
+            caret = value.length;
+        } else {
+            const nextLineStart = curLineEnd + 1; // char after '\n'
+            const nextLineEnd = lineEndIndex(nextLineStart);
+            const nextLineLen = nextLineEnd - nextLineStart;
+            const targetCol = Math.min(curCol, nextLineLen);
+            caret = nextLineStart + targetCol;
+        }
+    }
+
+    editor.selectionStart = editor.selectionEnd = caret;
+    lastCaretPosition = caret;
+    scheduleOverlayResync();
+});
+
 // Keep overlays accurate during IME composition
 editor.addEventListener('compositionstart', () => {
     isComposing = true;
@@ -773,8 +834,15 @@ editor.addEventListener('input', (e) => {
 
 // Block bulk deletion shortcuts - only allow single character deletion
 editor.addEventListener('keydown', (e) => {
-    // Block bulk deletion shortcuts while preserving single character deletion
-    if (e.key === 'Backspace' || e.key === 'Delete') {
+    // Only allow Backspace to delete, and only one character at a time
+    if (e.key === 'Delete') {
+        // Disallow Delete entirely so only Backspace can delete
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+    }
+
+    if (e.key === 'Backspace') {
         // Block if any modifier keys are pressed - this prevents:
         // - Option+Delete/Backspace (word deletion)
         // - Cmd+Delete/Backspace (line deletion) 
@@ -783,6 +851,30 @@ editor.addEventListener('keydown', (e) => {
         if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) {
             e.preventDefault();
             e.stopPropagation();
+            return false;
+        }
+
+        // If there is a selection, collapse it and delete a single char backward
+        const selStart = editor.selectionStart;
+        const selEnd = editor.selectionEnd;
+        if (selStart !== selEnd) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            let caret = Math.min(selStart, selEnd);
+            if (caret > 0) {
+                // Delete exactly one character before the collapsed caret
+                editor.value = editor.value.slice(0, caret - 1) + editor.value.slice(Math.max(selStart, selEnd));
+                editor.selectionStart = editor.selectionEnd = caret - 1;
+            } else {
+                // At start of document, just collapse selection to 0
+                editor.selectionStart = editor.selectionEnd = 0;
+            }
+            isDirty = true;
+            statusElem.textContent = '[Modified]';
+            updateTitle();
+            scheduleOverlayResync();
+            renderHighlight();
             return false;
         }
     }
