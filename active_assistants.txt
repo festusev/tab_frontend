@@ -1,2 +1,2 @@
-eta1
-untrained
+eta4
+untrained10
