@@ -100,7 +100,8 @@ ipcMain.handle('app:open-path', async (_evt, relativePath) => {
     try {
         // Get current obfuscated directory name from renderer for file operations
         const obfuscatedDirName = await mainWindow.webContents.executeJavaScript('window.api.getCurrentObfuscatedDirName()');
-        const safeAssistantName = obfuscatedDirName ? obfuscatedDirName.replace(/[^A-Za-z0-9_\-]/g, '_') : 'assistant_1';
+        // Default to 'no_assistant' if nothing is selected yet
+        const safeAssistantName = obfuscatedDirName ? obfuscatedDirName.replace(/[^A-Za-z0-9_\-]/g, '_') : 'no_assistant';
 
         let filePath;
 
@@ -286,7 +287,8 @@ ipcMain.handle('app:log-keystroke', async (_evt, { problemName, timestamp, actio
 
         // Get current obfuscated directory name from renderer for file operations
         const obfuscatedDirName = await mainWindow.webContents.executeJavaScript('window.api.getCurrentObfuscatedDirName()');
-        const safeAssistantName = obfuscatedDirName ? obfuscatedDirName.replace(/[^A-Za-z0-9_\-]/g, '_') : 'assistant_1';
+        // Default to 'no_assistant' if nothing is selected yet
+        const safeAssistantName = obfuscatedDirName ? obfuscatedDirName.replace(/[^A-Za-z0-9_\-]/g, '_') : 'no_assistant';
 
         // Create the CSV filename based on problem name
         const csvFileName = `${problemName}_log.csv`;
@@ -343,5 +345,4 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
-
 

@@ -25,7 +25,8 @@ const DEFAULT_COMPLETIONS_URL = resolveCompletionsUrl();
 let currentAssistantUrl = DEFAULT_COMPLETIONS_URL;
 let currentAssistantName = null;
 let currentActualAssistantName = null;
-let currentObfuscatedDirName = null;
+// Default to 'no_assistant' to avoid misrouting before selection
+let currentObfuscatedDirName = 'no_assistant';
 
 contextBridge.exposeInMainWorld('api', {
     openFile: () => ipcRenderer.invoke('app:open'),
