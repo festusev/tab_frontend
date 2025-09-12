@@ -3,7 +3,6 @@ import argparse
 import json
 import subprocess
 import sys
-import difflib
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 
@@ -108,15 +107,6 @@ def normalize(s: str) -> str:
         s += "\n"
     return s
 
-
-def diff_strings(expected: str, got: str, context: int = 2) -> str:
-    exp_lines = expected.splitlines(keepends=True)
-    got_lines = got.splitlines(keepends=True)
-    return "".join(
-        difflib.unified_diff(
-            exp_lines, got_lines, fromfile="expected", tofile="got", n=context
-        )
-    )
 
 
 def load_cases(path: str) -> Dict[str, List[Dict[str, str]]]:
@@ -237,9 +227,8 @@ def main() -> int:
             print(out)
             print(yellow("- expected -"))
             print(expected)
-            print(yellow("— diff —"))
-            diff = diff_strings(exp_cmp, out_cmp)
-            print(diff if diff else "(no text differences)")
+            print(yellow("— return code —"))
+            print(str(completed.returncode))
             if args.show_stderr and completed.stderr:
                 print(yellow("— stderr —"))
                 sys.stdout.write(completed.stderr.decode("utf-8", errors="replace"))
