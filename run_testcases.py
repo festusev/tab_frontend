@@ -218,6 +218,11 @@ def main() -> int:
 
         if passed:
             print(green(f"✔ {name} passed"))
+            # Optionally show stderr for passing cases if requested
+            if args.show_stderr and completed.stderr:
+                print(yellow("— stderr —"))
+                sys.stdout.write(completed.stderr.decode("utf-8", errors="replace"))
+                print()
         else:
             failed += 1
             print(red(f"✘ {name} failed (returncode={completed.returncode})"))
@@ -229,7 +234,8 @@ def main() -> int:
             print(expected)
             print(yellow("— return code —"))
             print(str(completed.returncode))
-            if args.show_stderr and completed.stderr:
+            # Always show stderr for failing cases to aid debugging
+            if completed.stderr:
                 print(yellow("— stderr —"))
                 sys.stdout.write(completed.stderr.decode("utf-8", errors="replace"))
                 print()
