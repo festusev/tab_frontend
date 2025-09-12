@@ -25,13 +25,20 @@ let problemSuffixToUrl = new Map(); // maps '/problems/<safe>.py' to URL
 
 
 let overlayRafId = 0;
+// Track last known caret to restore on blocked mouse interactions
+let lastCaretPosition = 0;
 function scheduleOverlayResync() {
     if (overlayRafId) cancelAnimationFrame(overlayRafId);
     overlayRafId = requestAnimationFrame(() => {
         overlayRafId = 0;
+        // Update styles and HTML first
         syncHighlightStyles();
         renderHighlight();
         renderGhost();
+        // Then mirror any scroll adjustments on the following frame
+        requestAnimationFrame(() => {
+            syncOverlayScroll();
+        });
     });
 }
 
@@ -107,8 +114,9 @@ function moveCaretToEnd() {
     editor.selectionEnd = len;
     editor.focus();
     editor.scrollTop = editor.scrollHeight;
-    renderHighlight();
-    renderGhost();
+    scheduleOverlayResync();
+    // Keep our last-known caret index in sync
+    lastCaretPosition = len;
 }
 
 window.__getEditorContent = function () {
@@ -121,8 +129,7 @@ editor.addEventListener('input', () => {
         statusElem.textContent = '[Modified]';
         updateTitle();
     }
-    renderHighlight();
-    // Resync overlays on next frame to account for scroll changes at the bottom
+    // Resync overlays on next frame(s) to account for scroll/height changes
     scheduleOverlayResync();
 });
 
@@ -221,11 +228,15 @@ function renderGhost() {
     const ghostWrapped = '<span class="ghost-text">' + ghostHighlighted + '</span>';
 
     // Update the highlight element with ghost text included
-    highlightEl.innerHTML = prefixHighlighted + ghostWrapped + afterHighlighted;
+    let htmlWithGhost = prefixHighlighted + ghostWrapped + afterHighlighted;
+    // Ensure an extra visible line box when the buffer ends with a newline
+    if (editor.value.endsWith('\n')) {
+        htmlWithGhost += '<span class="line-filler">&nbsp;</span>';
+    }
+    highlightEl.innerHTML = htmlWithGhost;
 
-    // Ensure highlight scroll stays in sync
-    if (highlightEl.scrollTop !== editor.scrollTop) highlightEl.scrollTop = editor.scrollTop;
-    if (highlightEl.scrollLeft !== editor.scrollLeft) highlightEl.scrollLeft = editor.scrollLeft;
+    // Ensure highlight overlay visually scrolls with the textarea using transform
+    syncOverlayScroll();
 
     // Hide the separate ghost element since we're showing inline
     ghostEl.style.display = 'none';
@@ -511,17 +522,27 @@ function syncHighlightStyles() {
 
 function renderHighlight() {
     if (!highlightEl) return;
-    highlightEl.innerHTML = highlightPython(editor.value);
-    // Ensure overlay scroll stays exactly in sync
+    let html = highlightPython(editor.value);
+    // If the text ends with a newline, add an invisible filler to create the trailing empty line box
+    if (editor.value.endsWith('\n')) {
+        html += '<span class="line-filler">&nbsp;</span>';
+    }
+    highlightEl.innerHTML = html;
+    // Ensure overlay visually scrolls exactly in sync
+    syncOverlayScroll();
+}
+
+function syncOverlayScroll() {
+    if (!highlightEl) return;
+    // Mirror the textarea's scroll positions directly
     if (highlightEl.scrollTop !== editor.scrollTop) highlightEl.scrollTop = editor.scrollTop;
     if (highlightEl.scrollLeft !== editor.scrollLeft) highlightEl.scrollLeft = editor.scrollLeft;
+    // Ensure no residual transform remains
+    if (highlightEl.style.transform) highlightEl.style.transform = 'translate(0px, 0px)';
 }
 
 editor.addEventListener('scroll', () => {
-    if (highlightEl) {
-        highlightEl.scrollTop = editor.scrollTop;
-        highlightEl.scrollLeft = editor.scrollLeft;
-    }
+    syncOverlayScroll();
     renderGhost();
 });
 
@@ -615,7 +636,6 @@ syncHighlightStyles();
 renderHighlight();
 
 // Disable mouse-based caret movement and text selection, but allow focus restoration
-let lastCaretPosition = 0;
 
 function blockMouseSelection(e) {
     // Allow right-click context menu if needed; block left/middle
@@ -625,13 +645,10 @@ function blockMouseSelection(e) {
     if (e.type === 'click') {
         e.preventDefault();
         e.stopPropagation();
-        // Store current caret position before focusing
-        lastCaretPosition = editor.selectionStart || 0;
-        // Focus the editor to show the caret
+        // Focus the editor to show the caret, but keep prior position
         editor.focus();
-        // Restore the last caret position
-        editor.selectionStart = lastCaretPosition;
-        editor.selectionEnd = lastCaretPosition;
+        editor.selectionStart = lastCaretPosition || 0;
+        editor.selectionEnd = lastCaretPosition || 0;
         return;
     }
 
@@ -1082,5 +1099,3 @@ async function loadAssistants() {
         }
     }
 })();
-
-

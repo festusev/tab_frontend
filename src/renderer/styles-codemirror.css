@@ -46,36 +46,41 @@ body {
     background: #3a3a3a;
 }
 
-#editor {
-    box-sizing: border-box;
-    width: 100%;
-    height: 100%;
-    padding: 12px;
-    background: transparent;
-    color: transparent;
-    text-shadow: none;
-    caret-color: #d4d4d4;
-    border: none;
-    outline: none;
-    resize: none;
-    font-size: 14px;
-    line-height: 1.4;
-    position: relative;
-    z-index: 2;
-    overflow: auto;
-    tab-size: 4;
-    scrollbar-gutter: stable both-edges;
-}
-
-#editor-wrap {
-    position: relative;
-    width: 100%;
+#editor-container {
     flex: 1;
     min-height: 0;
-    /* ensure only the textarea scrolls, not the container */
-    overflow: hidden;
+    position: relative;
 }
 
+/* CodeMirror styling */
+.cm-editor {
+    height: 100%;
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.cm-focused {
+    outline: none;
+}
+
+.cm-content {
+    padding: 12px;
+    min-height: 100%;
+    box-sizing: border-box;
+}
+
+.cm-scroller {
+    font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+/* Custom ghost text styling */
+.cm-ghost-text {
+    color: #888888 !important;
+    background: rgba(160, 160, 160, 0.08);
+    border-radius: 2px;
+}
+
+/* Launch screen styling */
 #launch {
     position: absolute;
     inset: 0;
@@ -171,97 +176,4 @@ body {
 
 .launch-footer button:active {
     background: #1d4a90;
-}
-
-#highlight {
-    box-sizing: border-box;
-    position: absolute;
-    pointer-events: none;
-    inset: 0;
-    padding: 12px;
-    color: #d4d4d4;
-    font-family: inherit;
-    font-size: 14px;
-    line-height: 1.4;
-    white-space: pre-wrap;
-    z-index: 0;
-    overflow: auto; /* allow programmatic scrolling to mirror textarea */
-    tab-size: 4;
-    scrollbar-gutter: stable both-edges;
-}
-
-/* Python token colors */
-.tok-kw {
-    color: #c586c0;
-}
-
-.tok-str {
-    color: #ce9178;
-}
-
-.tok-com {
-    color: #6a9955;
-}
-
-.tok-num {
-    color: #b5cea8;
-}
-
-#ghost {
-    position: absolute;
-    pointer-events: none;
-    color: #a0a0a0c0;
-    white-space: pre-wrap;
-    font-family: inherit;
-    font-size: 14px;
-    line-height: 1.4;
-    z-index: 1;
-}
-
-#editor-measure {
-    box-sizing: border-box;
-    position: absolute;
-    visibility: hidden;
-    white-space: pre-wrap;
-    font-family: inherit;
-    font-size: 14px;
-    line-height: 1.4;
-    padding: 12px;
-    width: 100%;
-    left: 0;
-    top: 0;
-    tab-size: 4;
-    color: #d4d4d4;
-}
-
-.ghost-text {
-    color: #888888 !important;
-    background: rgba(160, 160, 160, 0.08);
-}
-
-/* Override all syntax highlighting colors within ghost text to use consistent gray */
-.ghost-text .tok-kw {
-    color: #888888 !important;
-}
-
-.ghost-text .tok-str {
-    color: #888888 !important;
-}
-
-.ghost-text .tok-com {
-    color: #888888 !important;
-}
-
-.ghost-text .tok-num {
-    color: #888888 !important;
-}
-
-.line-filler { opacity: 0; }
-
-#debug-overlay {
-    display: none;
-}
-
-#footer {
-    display: none;
 }

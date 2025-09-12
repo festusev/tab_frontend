@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http: https:;" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Coding Assistant</title>
+    <link rel="stylesheet" href="styles-codemirror.css" />
+</head>
+
+<body>
+    <div id="titlebar">
+        <span id="filename">untitled</span>
+        <div id="titlebar-buttons">
+            <button id="btn-back">← Back to Launch</button>
+            <button id="btn-open-url" style="display:none">Open Problem</button>
+            <button id="btn-run-testcases" style="display:none">Run Testcases</button>
+        </div>
+        <span id="status">[New File]</span>
+    </div>
+    <div id="launch">
+        <div class="launch-inner">
+            <h1>Welcome</h1>
+            <label>Name <input id="user-name" type="text" placeholder="Your name" /></label>
+            <label>Assistant <select id="assistant-select"></select></label>
+            <div class="launch-actions">
+                <button id="btn-scratch">Open Scratchpad</button>
+                <div id="problems"></div>
+            </div>
+            <div class="launch-footer">
+                <button id="btn-survey">📝 Code Generation Study Form</button>
+            </div>
+        </div>
+    </div>
+    <div id="editor-container" style="display:none"></div>
+    <script type="module" src="renderer-codemirror.js"></script>
+</body>
+
+</html>
