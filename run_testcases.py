@@ -7,19 +7,13 @@ from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 
 BUILTIN_CASES: Dict[str, List[Dict[str, str]]] = {
-    "transducer": [
-        {"in": "(rev:abc)\n", "out": "cba\n"},
-        {"in": "(dup3:xy)\n", "out": "xyxyxy\n"},
-        {"in": "(rev:a^b^c)\n", "out": "cBa\n"},
-        {"in": "~Cat~\n", "out": "CCatt\n"},
-        {"in": "a^bc^d\n", "out": "aBCd\n"},
-        {"in": "^ab\n", "out": "AB\n"},
-        {"in": "~Ae!\n", "out": "Ae!\n"},
-        {"in": "~bQz~\n", "out": "bbQQzz\n"},
-        {"in": "(dup2:hi)there)!\n", "out": "hihithere)!\n"},
-        {"in": "(dup2:^ab^)~x~\n", "out": "ABABxx\n"},
-        {"in": "(rev:^ab^ ~x~)\n", "out": "xx BA\n"},
-        {"in": "~aEiOu~\n", "out": "aEiOu\n"},
+    "keyboard": [
+        {"in": "5\na\nb\nc\nd\ne\n", "out": "abcde"},
+        {"in": "5\n^\na\nb\n^\nc\n", "out": "ABc"},
+        {"in": "6\n~\na\nb\nc\n~\nd\ne\n", "out": "abbccde"},
+        {"in": "10\n#\n1\n2\n.\n3\n.\n4\n#\nA\n5\n", "out": "12.34"},
+        {"in": "7\n^\na\n~\nb\nc\n~\nd\n^\ne\n", "out": "ABBCCDe"},
+        {"in": "6\na\n \nb\n^\nc\n \nd\n", "out": "a bC d"},
     ],
     "lava": [
         {
@@ -106,7 +100,6 @@ def normalize(s: str) -> str:
     if s and not s.endswith("\n"):
         s += "\n"
     return s
-
 
 
 def load_cases(path: str) -> Dict[str, List[Dict[str, str]]]:
