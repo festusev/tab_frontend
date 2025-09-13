@@ -6,6 +6,31 @@ const path = require('path');
 let mainWindow = null;
 let currentFilePath = null;
 
+// Determine verbose suggestion logging
+function getNpmOriginalArgs() {
+    try {
+        const raw = process.env.npm_config_argv;
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed && parsed.original) ? parsed.original : [];
+    } catch (_e) {
+        return [];
+    }
+}
+
+function isVerboseEnabled() {
+    const argv = Array.isArray(process.argv) ? process.argv.slice(2) : [];
+    const npmOriginal = getNpmOriginalArgs();
+    const allArgs = [...argv, ...npmOriginal];
+    const flag = allArgs.includes('-v') || allArgs.includes('--verbose');
+    const envVerbose = process.env.VERBOSE === '1' || process.env.APP_VERBOSE === '1';
+    const debug = String(process.env.DEBUG || '');
+    const debugEnabled = /(\*|suggest|completion)/i.test(debug);
+    return flag || envVerbose || debugEnabled;
+}
+
+const SUGGESTION_VERBOSE = isVerboseEnabled();
+
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 900,
@@ -324,6 +349,39 @@ ipcMain.handle('app:log-keystroke', async (_evt, { problemName, timestamp, actio
     }
 });
 
+// Log suggestion lifecycle info to terminal for debugging/telemetry
+ipcMain.handle('app:log-suggestion-event', async (_evt, payload) => {
+    try {
+        if (!SUGGESTION_VERBOSE) {
+            return { ok: true };
+        }
+        const {
+            phase, // 'retrieved'
+            timestamp,
+            shown, // boolean
+            prefixMatches, // boolean
+            suffixLength, // number
+            preview, // string (optional)
+            prefixLength // number (optional)
+        } = payload || {};
+
+        const ts = timestamp || new Date().toISOString();
+        const ph = phase || 'retrieved';
+        const shownStr = typeof shown === 'boolean' ? String(shown) : 'unknown';
+        const pmStr = typeof prefixMatches === 'boolean' ? String(prefixMatches) : 'unknown';
+        const lenStr = typeof suffixLength === 'number' ? String(suffixLength) : 'unknown';
+        const preLenStr = typeof prefixLength === 'number' ? ` prefix_len=${prefixLength}` : '';
+        const prevStr = preview ? ` preview="${preview}"` : '';
+
+        console.log(`[suggestion] ts=${ts} phase=${ph} shown=${shownStr} prefix_match=${pmStr} suffix_len=${lenStr}${preLenStr}${prevStr}`);
+        return { ok: true };
+    } catch (err) {
+        // Ensure we never throw from logging
+        console.warn('Failed to log suggestion event:', err);
+        return { ok: false, error: String(err) };
+    }
+});
+
 app.whenReady().then(() => {
     // Ensure problems directory exists at startup
     try {
@@ -345,4 +403,3 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
-

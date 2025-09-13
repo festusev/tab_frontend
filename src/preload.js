@@ -48,5 +48,7 @@ contextBridge.exposeInMainWorld('api', {
     writeFile: (relativePath, content) => ipcRenderer.invoke('app:write-file', relativePath, content),
     openExternalUrl: (url) => ipcRenderer.invoke('app:open-external', url),
     runTestcases: (problemName) => ipcRenderer.invoke('app:run-testcases', problemName),
-    logKeystroke: (data) => ipcRenderer.invoke('app:log-keystroke', data)
+    logKeystroke: (data) => ipcRenderer.invoke('app:log-keystroke', data),
+    // Debug/telemetry: log suggestion lifecycle to main (prints in terminal)
+    logSuggestionEvent: (data) => ipcRenderer.invoke('app:log-suggestion-event', data)
 });

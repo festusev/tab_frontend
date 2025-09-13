@@ -140,6 +140,7 @@ let completionAbortController = null;
 let inputDebounceTimer = null;
 let suppressUntilInput = false;
 let isComposing = false;
+let dirtyDuringCompletion = false; // tracks edits while a request is in-flight
 
 function insertSpacesAtCursor() {
     const start = editor.selectionStart;
@@ -148,6 +149,8 @@ function insertSpacesAtCursor() {
     const spaces = '    ';
     editor.value = value.substring(0, start) + spaces + value.substring(end);
     editor.selectionStart = editor.selectionEnd = start + spaces.length;
+    // Treat this as user input to unblock suppressed fetching
+    suppressUntilInput = false;
     if (!isDirty) {
         isDirty = true;
         statusElem.textContent = '[Modified]';
@@ -257,6 +260,14 @@ async function fetchCompletion(prefixText, opts) {
         isCompleting = true;
         if (insert) statusElem.textContent = '[Completing…]';
         const body = JSON.stringify([prefixText]);
+        // Terminal log: request being sent to the completion server
+        try {
+            window.api && window.api.logSuggestionEvent && window.api.logSuggestionEvent({
+                phase: 'request',
+                timestamp: new Date().toISOString(),
+                prefixLength: prefixText.length
+            });
+        } catch (_e) { /* ignore logging errors */ }
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -284,6 +295,28 @@ async function fetchCompletion(prefixText, opts) {
         if (suffix && suffix.trim()) {
             setTimeout(() => logKeystroke('proposed_suggestion', suffix), 0);
         }
+
+        // Terminal log: suggestion retrieved + whether it will be shown (prefix match and selection empty)
+        try {
+            const caret = editor.selectionStart;
+            const selectionEmpty = editor.selectionStart === editor.selectionEnd;
+            const currentPrefix = editor.value.slice(0, caret);
+            const prefixMatches = currentPrefix === prefixText;
+            const willShow = selectionEmpty && prefixMatches && !!suffix;
+            const preview = (suffix || '').slice(0, 80).replace(/\n/g, '\\n');
+            window.api && window.api.logSuggestionEvent && window.api.logSuggestionEvent({
+                phase: 'retrieved',
+                timestamp: new Date().toISOString(),
+                shown: willShow,
+                prefixMatches,
+                suffixLength: (suffix || '').length,
+                preview
+            });
+            // If stale (prefix mismatch), fetch again for the latest state
+            if (!prefixMatches) {
+                scheduleCompletionFetch();
+            }
+        } catch (_e) { /* ignore logging errors */ }
 
         try {
             renderGhost();
@@ -337,6 +370,11 @@ async function fetchCompletion(prefixText, opts) {
         return null;
     } finally {
         isCompleting = false;
+        // If user edited during request, kick off a fresh fetch now that we're idle
+        if (dirtyDuringCompletion) {
+            dirtyDuringCompletion = false;
+            scheduleCompletionFetch();
+        }
     }
 }
 
@@ -386,6 +424,7 @@ editor.addEventListener('keydown', (e) => {
 editor.addEventListener('input', () => {
     // Allow fetching again after a new keystroke
     suppressUntilInput = false;
+    if (isCompleting) dirtyDuringCompletion = true;
     scheduleCompletionFetch();
 });
 
