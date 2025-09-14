@@ -167,6 +167,80 @@ function lastLineNonEmpty(prefixText) {
     return tail.trim().length > 0;
 }
 
+// After receiving a completion suffix, snap indentation of lines 2+
+// so that each begins with the nearest multiple of 4 spaces.
+function snapSuffixIndentation(suffix) {
+    if (!suffix || typeof suffix !== 'string') return suffix;
+    const lines = suffix.split('\n');
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        // Compute effective leading indentation in spaces (tabs count as 4)
+        let j = 0;
+        let indentSpaces = 0;
+        while (j < line.length) {
+            const ch = line[j];
+            if (ch === ' ') { indentSpaces += 1; j++; }
+            else if (ch === '\t') { indentSpaces += 4; j++; }
+            else { break; }
+        }
+        const rest = line.slice(j);
+        // Snap to nearest multiple of 4
+        const snapped = Math.round(indentSpaces / 4) * 4;
+        const snappedIndent = ' '.repeat(snapped);
+        lines[i] = snappedIndent + rest;
+    }
+    return lines.join('\n');
+}
+
+function getCurrentLineTail(prefixText) {
+    const lastNewline = prefixText.lastIndexOf('\n');
+    return lastNewline === -1 ? prefixText : prefixText.slice(lastNewline + 1);
+}
+
+function countIndentSpaces(whitespace) {
+    let spaces = 0;
+    for (let i = 0; i < whitespace.length; i++) {
+        const ch = whitespace[i];
+        if (ch === ' ') spaces += 1;
+        else if (ch === '\t') spaces += 4;
+        else break;
+    }
+    return spaces;
+}
+
+// If the current line (in prefix) is only whitespace, also snap the
+// first line of the suffix so that the combined indentation (prefix + suffix)
+// begins at the nearest multiple of 4 spaces.
+function snapFirstLineConsideringPrefix(prefixText, suffix) {
+    if (!suffix || typeof suffix !== 'string') return suffix;
+    const tail = getCurrentLineTail(prefixText);
+    if (!/^\s*$/.test(tail)) return suffix; // only apply when current line is whitespace-only
+
+    const lines = suffix.split('\n');
+    if (lines.length === 0) return suffix;
+
+    const first = lines[0];
+    // Measure existing leading whitespace on the first suffix line
+    let j = 0;
+    let suffixIndentSpaces = 0;
+    while (j < first.length) {
+        const ch = first[j];
+        if (ch === ' ') { suffixIndentSpaces += 1; j++; }
+        else if (ch === '\t') { suffixIndentSpaces += 4; j++; }
+        else { break; }
+    }
+    const rest = first.slice(j);
+    const prefixIndentSpaces = countIndentSpaces(tail);
+
+    // Desired combined indentation snapped to nearest multiple of 4
+    const combined = prefixIndentSpaces + suffixIndentSpaces;
+    const snappedCombined = Math.round(combined / 4) * 4;
+    const neededSuffixIndent = Math.max(0, snappedCombined - prefixIndentSpaces);
+
+    lines[0] = ' '.repeat(neededSuffixIndent) + rest;
+    return lines.join('\n');
+}
+
 function escapeHtml(text) {
     return text
         .replace(/&/g, '&amp;')
@@ -289,6 +363,10 @@ async function fetchCompletion(prefixText, opts) {
         const suffixStart = prefixText.length;
         let suffix = String(predicted).slice(suffixStart);
         if (suffix.startsWith(' ') && lastLineNonEmpty(prefixText)) suffix = suffix.slice(1);
+        // If current line is whitespace-only, snap first line considering prefix indent
+        suffix = snapFirstLineConsideringPrefix(prefixText, suffix);
+        // Normalize indentation for lines after the first to nearest multiple of 4
+        suffix = snapSuffixIndentation(suffix);
         lastCompletion = { prefix: prefixText, full: predicted, suffix, time: Date.now() };
 
         // Log the proposed suggestion if there's actual content to suggest
