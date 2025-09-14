@@ -14,6 +14,9 @@ def read_starting_position():
     r, c, d = int(parts[0]), int(parts[1]), parts[2]
     return r, c, d
 
+def read_q():
+    """Reads q from stdin."""
+    return int(sys.stdin.readline().strip())
 
 def read_next_move():
     """Reads and returns the next command as a string, or None if EOF."""
@@ -24,16 +27,3 @@ def read_next_move():
 
 
 def main():
-    # Step 1: Read grid
-    n, grid = read_grid()
-
-    # Step 2: Read starting position
-    r, c, d = read_starting_position()
-
-    # Step 3: Read number of commands
-    q = int(sys.stdin.readline().strip())
-
-    # Example loop that just echoes back the commands
-    # for _ in range(q):
-    #     cmd = read_next_move()
-    ## Your code here

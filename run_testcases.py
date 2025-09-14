@@ -10,10 +10,11 @@ BUILTIN_CASES: Dict[str, List[Dict[str, str]]] = {
     "keyboard": [
         {"in": "5\na\nb\nc\nd\ne\n", "out": "abcde"},
         {"in": "5\n^\na\nb\n^\nc\n", "out": "ABc"},
-        {"in": "6\n~\na\nb\nc\n~\nd\ne\n", "out": "abbccde"},
-        {"in": "10\n#\n1\n2\n.\n3\n.\n4\n#\nA\n5\n", "out": "12.34"},
-        {"in": "7\n^\na\n~\nb\nc\n~\nd\n^\ne\n", "out": "ABBCCDe"},
-        {"in": "6\na\n \nb\n^\nc\n \nd\n", "out": "a bC d"},
+        {"in": "7\n~\na\nb\nc\n~\nd\ne\n", "out": "abbccde"},
+        {"in": "8\n#\n1\n2\n.\n3\n.\n4\n#\n", "out": "12.34"},
+        {"in": "9\n^\na\n~\nb\nc\n~\nd\n^\ne\n", "out": "ABBCCDe"},
+        {"in": "7\na\n \nb\n^\nc\n \nd\n", "out": "a bC D"},
+        {"in": "13\n#\n1\n2\n.\n3\n#\nA\nB\n#\n4\n5\n.\n6\n#\n", "out": "12.3AB45.6"},
     ],
     "lava": [
         {
@@ -161,13 +162,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run solution.py against testcases and verify output."
     )
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--transducer", action="store_true")
-    group.add_argument("--lava", action="store_true")
-    group.add_argument("--binary_search", action="store_true")
-    group.add_argument("--merge", action="store_true")
-    group.add_argument("--cancel", action="store_true")
-    group.add_argument("--vector", action="store_true")
+    parser.add_argument(
+        "--problem",
+        type=str,
+        required=True,
+        help="problem name (e.g., keyboard, lava, binary, merge, cancel, vector, transducer)",
+    )
     parser.add_argument("--cases", type=str, default=None)
     parser.add_argument("--solution", type=str, default="solution.py")
     parser.add_argument("--python", type=str, default=sys.executable)
@@ -177,21 +177,37 @@ def main() -> int:
     parser.add_argument("--stop-on-fail", action="store_true")
     args = parser.parse_args()
 
-    if args.transducer:
-        mode = "transducer"
-    elif args.lava:
-        mode = "lava"
-    elif args.binary_search:
-        mode = "binary_search"
-    elif args.merge:
-        mode = "merge"
-    elif args.cancel:
-        mode = "cancel"
-    elif args.vector:
-        mode = "vector"
+    # Normalize requested problem name to internal canonical key
+    requested = (args.problem or "").strip()
+    if not requested:
+        parser.error("--problem is required and must be non-empty")
+
+    # Aliases: map simple filenames to canonical keys in BUILTIN_CASES
+    alias_map = {
+        "binary": "binary_search",
+        "binary_search": "binary_search",
+        "lava": "lava",
+        "merge": "merge",
+        "cancel": "cancel",
+        "vector": "vector",
+        "keyboard": "keyboard",
+        "transducer": "transducer",
+    }
+
+    mode = alias_map.get(requested, requested)
 
     cases_from_file = load_cases(args.cases) if args.cases else None
-    cases = choose_cases(mode, cases_from_file)
+    # Prefer canonical key, but fall back to the requested key if custom cases use it
+    if cases_from_file is not None:
+        if mode in cases_from_file:
+            cases = cases_from_file[mode]
+        elif requested in cases_from_file:
+            cases = cases_from_file[requested]
+        else:
+            # Defer to builtin if custom cases don't include this problem
+            cases = choose_cases(mode, None)
+    else:
+        cases = choose_cases(mode, None)
 
     print(bold(f"Running {len(cases)} {mode} test(s) against {args.solution}"))
     failed = 0

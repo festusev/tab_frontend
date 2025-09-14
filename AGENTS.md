@@ -13,7 +13,7 @@
 - Run app: `npm start` — launches Electron (`electron .`).
 - Troubleshoot: `DEBUG=* npm start` — verbose logs to terminal.
 - Problem tests (Python):
-  - Example: `python3 run_testcases.py --merge --solution problems/<assistant>/merge.py`.
+  - Example: `python3 run_testcases.py --problem merge --solution problems/<assistant>/merge.py`.
   - Custom cases: `--cases path/to/cases.json`.
 
 ## Coding Style & Naming Conventions
@@ -24,7 +24,8 @@
 
 ## Testing Guidelines
 - No JS unit suite yet; validate manually via `npm start` and console.
-- For problems, use `run_testcases.py` with the correct mode flag (`--merge`, `--vector`, etc.). Aim to keep solutions pure and deterministic.
+- For problems, run `run_testcases.py` using the unified flag: `python3 run_testcases.py --problem <problem_name> --solution problems/<assistant>/<problem_name>.py`.
+  - Examples: `--problem merge`, `--problem vector`, `--problem keyboard`, `--problem binary` (aliases to built-in `binary_search`).
 - Add minimal repros for UI bugs (steps, expected vs. actual) in PRs.
 
 ## Commit & Pull Request Guidelines
@@ -37,4 +38,3 @@
 - Environment: `COMPLETIONS_URL` and/or `COMPLETIONS_PORT` override the completions server (defaults to `http://localhost:9600`).
 - Paths resolved relative to app root; avoid absolute paths in renderer code.
 - Do not expose new Node APIs to the renderer without a `preload` wrapper and IPC validation.
-

@@ -270,19 +270,10 @@ ipcMain.handle('app:run-testcases', async (_evt, problemName) => {
     try {
         const { clipboard } = require('electron');
 
-        // Map problem names to command line arguments
-        const problemArgMap = {
-            'transducer': '--transducer',
-            'lava': '--lava',
-            'binary': '--binary_search',
-            'merge': '--merge',
-            'cancel': '--cancel',
-            'vector': '--vector'
-        };
-
-        const arg = problemArgMap[problemName];
-        if (!arg) {
-            return { ok: false, error: `Unknown problem: ${problemName}` };
+        // Use the filename-derived problem name directly
+        const safeProblem = String(problemName || '').trim();
+        if (!safeProblem) {
+            return { ok: false, error: 'Unknown problem name' };
         }
 
         // Get the current file path to use as the solution file
@@ -292,7 +283,7 @@ ipcMain.handle('app:run-testcases', async (_evt, problemName) => {
         }
 
         // Create the command to copy with the solution file path
-        const command = `python run_testcases.py ${arg} --solution "${currentFile}"`;
+        const command = `python run_testcases.py --problem "${safeProblem}" --solution "${currentFile}"`;
 
         // Copy to clipboard
         clipboard.writeText(command);

@@ -22,7 +22,4 @@ def read_next_char() -> str:
 
 
 def main() -> None:
-    q = read_q()
 
-    for _ in range(q):
-        char = read_next_char()

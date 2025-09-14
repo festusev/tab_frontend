@@ -770,25 +770,18 @@ window.api.onFileOpened(({ filePath, content }) => {
         let matchedUrl = null;
         let matchedProblemName = null;
 
-        // Check if this is a problem file
-        const problemsMatch = appPath.match(/\/problems\/([^\/]+)\.py$/);
+        // Check if this is a problem file (support both /problems/<name>.py and /problems/<assistant>/<name>.py)
+        const problemsMatch = appPath.match(/\/problems\/([^\/]+)\.py$/) || appPath.match(/\/problems\/[^\/]+\/([^\/]+)\.py$/);
         if (problemsMatch) {
             const fileName = problemsMatch[1];
-            // Map from filename to problem name used in testcases
-            const fileNameToProblemName = {
-                'transducer': 'transducer',
-                'lava': 'lava',
-                'binary': 'binary',
-                'merge': 'merge',
-                'cancel': 'cancel',
-                'vector': 'vector'
-            };
-            matchedProblemName = fileNameToProblemName[fileName] || null;
-        }
+            // Use filename as the problem name directly, but exclude scratchpad
+            matchedProblemName = (fileName === 'scratchpad') ? null : fileName;
 
-        // Check for problem URL mapping
-        for (const [suffix, url] of problemSuffixToUrl.entries()) {
-            if (appPath.endsWith(suffix)) { matchedUrl = url; break; }
+            // Resolve URL using filename-based suffix mapping built at launch
+            const key = `/problems/${fileName}.py`;
+            if (problemSuffixToUrl && problemSuffixToUrl.has(key)) {
+                matchedUrl = problemSuffixToUrl.get(key);
+            }
         }
 
         currentProblemUrl = matchedUrl;
