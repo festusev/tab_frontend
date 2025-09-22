@@ -1,0 +1,9 @@
+timestamp	action_type	action_info	caret_index
+2025-01-01T11:00:00.000Z	current_code	def calculate():	15
+2025-01-01T11:00:01.000Z	proposed_suggestion	 result = 0	15
+2025-01-01T11:00:02.000Z	accepted_suggestion	 result = 0	25
+2025-01-01T11:00:03.000Z	character_typed	\n    for i in range(10):	40
+2025-01-01T11:00:04.000Z	proposed_suggestion	 result += i	55
+2025-01-01T11:00:05.000Z	accepted_suggestion	 result += i	67
+2025-01-01T11:00:06.000Z	deletion	1	66
+2025-01-01T11:00:07.000Z	character_typed	 result *= 2	75

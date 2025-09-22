@@ -1,0 +1,10 @@
+{
+    "Assistant 1": {
+        "actualName": "eta4",
+        "obfuscatedDirName": "assistant_1"
+    },
+    "Assistant 2": {
+        "actualName": "untrained10",
+        "obfuscatedDirName": "assistant_2"
+    }
+}

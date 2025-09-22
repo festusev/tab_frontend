@@ -1,0 +1,11 @@
+timestamp	action_type	action_info	caret_index
+2025-01-01T10:00:00.000Z	current_code	def hello():	10
+2025-01-01T10:00:01.000Z	proposed_suggestion	 print("Hello, World!")	10
+2025-01-01T10:00:02.000Z	accepted_suggestion	 print("Hello, World!")	28
+2025-01-01T10:00:03.000Z	character_typed	\n    return	35
+2025-01-01T10:00:04.000Z	proposed_suggestion	 "success"	42
+2025-01-01T10:00:05.000Z	accepted_suggestion	 "success"	50
+2025-01-01T10:00:06.000Z	deletion	1	49
+2025-01-01T10:00:07.000Z	deletion	1	48
+2025-01-01T10:00:08.000Z	deletion	1	47
+2025-01-01T10:00:09.000Z	character_typed	"done"	51

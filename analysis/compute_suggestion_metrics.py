@@ -78,7 +78,11 @@ def compute_metrics_for_csv(csv_path: Path) -> Metrics:
                 caret_after = int((row.get(caret_col) or caret)) if caret_col else caret
             except ValueError:
                 caret_after = caret
-            caret_after = clamp(caret_after, 0, len(buf)) if action != "accepted_suggestion" else caret_after
+            caret_after = (
+                clamp(caret_after, 0, len(buf))
+                if action != "accepted_suggestion"
+                else caret_after
+            )
 
             before = caret
 
@@ -87,15 +91,14 @@ def compute_metrics_for_csv(csv_path: Path) -> Metrics:
                 # No buffer change
             elif action == "accepted_suggestion":
                 accepted += 1
-                # Insert number of characters equal to caret delta as 'S'
-                d = max(0, caret_after - before)
-                if d:
-                    d = int(d)
-                    # Grow buf with 'U's if caret_after extends beyond current buffer
+                # Use the actual suggestion content length instead of caret delta
+                suggestion_length = len(info) if info else 0
+                if suggestion_length > 0:
+                    # Grow buf with 'U's if before extends beyond current buffer
                     if before > len(buf):
                         buf.extend(["U"] * (before - len(buf)))
-                    buf[before:before] = ["S"] * d
-                    suggested_chars += d
+                    buf[before:before] = ["S"] * suggestion_length
+                    suggested_chars += suggestion_length
                 caret = clamp(caret_after, 0, len(buf))
             elif action == "character_typed":
                 # Estimate inserted char count by caret delta
@@ -169,7 +172,11 @@ def print_results(results: Dict[str, Dict[str, Metrics]]) -> None:
     for assistant, files in sorted(results.items()):
         print(f"Assistant: {assistant}")
         for csv_name, m in sorted(files.items()):
-            pct = (m.suggested_chars_deleted / m.suggested_chars * 100.0) if m.suggested_chars else 0.0
+            pct = (
+                (m.suggested_chars_deleted / m.suggested_chars * 100.0)
+                if m.suggested_chars
+                else 0.0
+            )
             print(
                 f"  - {csv_name}: proposed={m.proposed}, accepted={m.accepted}, "
                 f"suggested_chars={m.suggested_chars}, deleted_from_suggestions={m.suggested_chars_deleted}, "
