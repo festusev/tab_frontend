@@ -48,6 +48,15 @@ python3 analysis/compute_suggestion_metrics.py --problems metrics_tests/test_pro
 python3 analysis/compute_aggregate_metrics.py --problems-dir metrics_tests
 ```
 
+## Dependencies
+
+The aggregate metrics script requires `scipy` for statistical tests:
+```bash
+pip3 install scipy
+```
+
+Without scipy, the script will still work but won't show p-values for the binomial exact test.
+
 ## Test Data Details
 
 The CSV files contain realistic coding session logs with:

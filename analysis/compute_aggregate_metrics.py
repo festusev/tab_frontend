@@ -20,6 +20,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+try:
+    from scipy.stats import norm, ttest_ind
+except ImportError:
+    norm = None
+    ttest_ind = None
+
 # Import the existing metrics computation functionality
 from compute_suggestion_metrics import Metrics, scan_problems_dir
 
@@ -37,12 +43,15 @@ class AggregateMetrics:
     # Individual measurements for standard error calculation
     individual_acceptance_rates: List[float] = None  # type: ignore
     individual_avg_deleted_chars: List[float] = None  # type: ignore
+    individual_avg_suggestion_lengths: List[float] = None  # type: ignore
 
     def __post_init__(self):
         if self.individual_acceptance_rates is None:
             object.__setattr__(self, "individual_acceptance_rates", [])
         if self.individual_avg_deleted_chars is None:
             object.__setattr__(self, "individual_avg_deleted_chars", [])
+        if self.individual_avg_suggestion_lengths is None:
+            object.__setattr__(self, "individual_avg_suggestion_lengths", [])
 
     @property
     def acceptance_rate(self) -> float:
@@ -72,6 +81,15 @@ class AggregateMetrics:
         )
 
     @property
+    def avg_accepted_suggestion_length(self) -> float:
+        """Calculate average length of accepted suggestions in characters."""
+        return (
+            (self.total_suggested_chars / self.total_accepted)
+            if self.total_accepted > 0
+            else 0.0
+        )
+
+    @property
     def acceptance_rate_standard_error(self) -> float:
         """Calculate standard error of acceptance rate."""
         if len(self.individual_acceptance_rates) <= 1:
@@ -92,6 +110,101 @@ class AggregateMetrics:
         return statistics.stdev(self.individual_avg_deleted_chars) / (
             len(self.individual_avg_deleted_chars) ** 0.5
         )
+
+    @property
+    def avg_suggestion_length_standard_error(self) -> float:
+        """Calculate standard error of average suggestion length."""
+        if len(self.individual_avg_suggestion_lengths) <= 1:
+            return 0.0
+        import statistics
+
+        return statistics.stdev(self.individual_avg_suggestion_lengths) / (
+            len(self.individual_avg_suggestion_lengths) ** 0.5
+        )
+
+
+def two_proportion_z_test(
+    metrics1: AggregateMetrics, metrics2: AggregateMetrics
+) -> float:
+    """
+    Perform a two-proportion z-test to compare acceptance rates between two methods.
+
+    Tests the hypothesis that method1 has a higher acceptance rate than method2.
+
+    Args:
+        metrics1: Metrics for the first method (e.g., eta4)
+        metrics2: Metrics for the second method (e.g., untrained10)
+
+    Returns:
+        p-value for the one-sided test (method1 > method2)
+    """
+    if norm is None:
+        return float("nan")  # Return NaN if scipy is not available
+
+    # Get the counts
+    n1 = metrics1.total_proposed
+    x1 = metrics1.total_accepted
+    n2 = metrics2.total_proposed
+    x2 = metrics2.total_accepted
+
+    if n1 == 0 or n2 == 0:
+        return float("nan")
+
+    # Calculate sample proportions
+    p1 = x1 / n1
+    p2 = x2 / n2
+
+    # If both proportions are identical, p-value should be 0.5 (no difference)
+    if p1 == p2:
+        return 0.5
+
+    # Calculate the pooled proportion under the null hypothesis
+    # (that both methods have the same acceptance rate)
+    pooled_p = (x1 + x2) / (n1 + n2)
+
+    # Calculate the standard error of the difference
+    se = (pooled_p * (1 - pooled_p) * (1 / n1 + 1 / n2)) ** 0.5
+
+    if se == 0:
+        return 0.5  # If standard error is 0, no difference between methods
+
+    # Calculate the z-statistic
+    z = (p1 - p2) / se
+
+    # Calculate the p-value for the one-sided test (method1 > method2)
+    p_value = 1 - norm.cdf(z)
+    return p_value
+
+
+def t_test_deleted_chars(
+    metrics1: AggregateMetrics, metrics2: AggregateMetrics
+) -> float:
+    """
+    Perform a t-test to compare average deleted characters per acceptance between two methods.
+
+    Tests the hypothesis that method1 has fewer deleted characters per acceptance than method2.
+
+    Args:
+        metrics1: Metrics for the first method (e.g., eta4)
+        metrics2: Metrics for the second method (e.g., untrained10)
+
+    Returns:
+        p-value for the one-sided test (method1 < method2)
+    """
+    if ttest_ind is None:
+        return float("nan")  # Return NaN if scipy is not available
+
+    # Get the individual measurements for each method
+    values1 = metrics1.individual_avg_deleted_chars
+    values2 = metrics2.individual_avg_deleted_chars
+
+    if len(values1) < 2 or len(values2) < 2:
+        return float("nan")
+
+    # Perform a two-sample t-test
+    # We use alternative='less' to test if method1 < method2
+    _, p_value = ttest_ind(values1, values2, alternative="less")
+    return p_value
 
 
 def load_mapping_file(problems_dir: Path) -> Dict[str, str]:
@@ -233,6 +346,7 @@ def process_all_problems(problems_base_dir: Path) -> Dict[str, AggregateMetrics]
         # Track individual measurements per problem for standard error calculation
         individual_acceptance_rates = []
         individual_avg_deleted_chars = []
+        individual_avg_suggestion_lengths = []
 
         # Count unique problems for this method
         unique_problems = set(problem_name for problem_name, _ in assistant_list)
@@ -254,6 +368,7 @@ def process_all_problems(problems_base_dir: Path) -> Dict[str, AggregateMetrics]
                 problem_proposed = 0
                 problem_accepted = 0
                 problem_suggested_chars_deleted = 0
+                problem_suggested_chars = 0
 
                 for _, metrics in assistant_results.items():
                     total_proposed += metrics.proposed
@@ -266,6 +381,7 @@ def process_all_problems(problems_base_dir: Path) -> Dict[str, AggregateMetrics]
                     problem_proposed += metrics.proposed
                     problem_accepted += metrics.accepted
                     problem_suggested_chars_deleted += metrics.suggested_chars_deleted
+                    problem_suggested_chars += metrics.suggested_chars
 
                 # Calculate per-problem rates
                 if problem_proposed > 0:
@@ -280,6 +396,13 @@ def process_all_problems(problems_base_dir: Path) -> Dict[str, AggregateMetrics]
                     )
                     individual_avg_deleted_chars.append(problem_avg_deleted)
 
+                    problem_avg_suggestion_length = (
+                        problem_suggested_chars / problem_accepted
+                    )
+                    individual_avg_suggestion_lengths.append(
+                        problem_avg_suggestion_length
+                    )
+
         method_metrics[method_name] = AggregateMetrics(
             total_proposed=total_proposed,
             total_accepted=total_accepted,
@@ -289,6 +412,7 @@ def process_all_problems(problems_base_dir: Path) -> Dict[str, AggregateMetrics]
             csv_file_count=csv_file_count,
             individual_acceptance_rates=individual_acceptance_rates,
             individual_avg_deleted_chars=individual_avg_deleted_chars,
+            individual_avg_suggestion_lengths=individual_avg_suggestion_lengths,
         )
 
     return method_metrics
@@ -319,6 +443,9 @@ def print_aggregate_results(method_metrics: Dict[str, AggregateMetrics]) -> None
             f"  Total Deleted Suggested Chars: {metrics.total_suggested_chars_deleted}"
         )
         print(
+            f"  Avg Accepted Suggestion Length: {metrics.avg_accepted_suggestion_length:.2f} ± {metrics.avg_suggestion_length_standard_error:.2f} chars"
+        )
+        print(
             f"  Avg Deleted Chars per Acceptance: {metrics.avg_deleted_chars_per_acceptance:.2f} ± {metrics.avg_deleted_chars_standard_error:.2f}"
         )
         print()
@@ -344,6 +471,22 @@ def print_aggregate_results(method_metrics: Dict[str, AggregateMetrics]) -> None
         print(
             f"  Difference: {metrics1.acceptance_rate - metrics2.acceptance_rate:+.2f} percentage points"
         )
+
+        # Calculate and display p-value from two-proportion z-test
+        # Test if m1 has higher acceptance rate than m2
+        p_value = two_proportion_z_test(metrics1, metrics2)
+        if not (p_value != p_value):  # Check if not NaN
+            print(f"  P-value ({m1} > {m2}): {p_value:.4f}")
+            if p_value < 0.001:
+                print("  Significance: *** (p < 0.001)")
+            elif p_value < 0.01:
+                print("  Significance: ** (p < 0.01)")
+            elif p_value < 0.05:
+                print("  Significance: * (p < 0.05)")
+            else:
+                print("  Significance: not significant (p >= 0.05)")
+        else:
+            print("  P-value: N/A (scipy not available)")
         print()
 
         print("Avg Deleted Chars per Acceptance:")
@@ -356,6 +499,22 @@ def print_aggregate_results(method_metrics: Dict[str, AggregateMetrics]) -> None
         print(
             f"  Difference: {metrics1.avg_deleted_chars_per_acceptance - metrics2.avg_deleted_chars_per_acceptance:+.2f} characters"
         )
+
+        # Calculate and display p-value from t-test
+        # Test if m1 has fewer deleted chars per acceptance than m2
+        t_p_value = t_test_deleted_chars(metrics1, metrics2)
+        if not (t_p_value != t_p_value):  # Check if not NaN
+            print(f"  P-value ({m1} < {m2}): {t_p_value:.4f}")
+            if t_p_value < 0.001:
+                print("  Significance: *** (p < 0.001)")
+            elif t_p_value < 0.01:
+                print("  Significance: ** (p < 0.01)")
+            elif t_p_value < 0.05:
+                print("  Significance: * (p < 0.05)")
+            else:
+                print("  Significance: not significant (p >= 0.05)")
+        else:
+            print("  P-value: N/A (insufficient data or scipy not available)")
         print()
 
         print("Total Activity:")
